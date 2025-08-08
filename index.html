@@ -464,10 +464,10 @@
             draw() {
                 if (!this.active) return;
                 
-                // 绘制堆叠的瓦片层
+                // 绘制堆叠的瓦片层 - 完全垂直叠放
                 for (let layer = this.stackHeight - 1; layer >= 0; layer--) {
-                    const layerAlpha = Math.max(0.4, 1 - layer * 0.2);
-                    const offsetY = layer * 6; // 每层向下偏移6像素
+                    const layerAlpha = Math.max(0.4, 1 - layer * 0.15);
+                    const offsetY = layer * 4; // 减少偏移，更紧密堆叠
                     
                     // 绘制八边形瓦片
                     ctx.fillStyle = `rgba(135, 206, 235, ${layerAlpha})`;
@@ -492,6 +492,24 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(this.health.toString(), this.x + this.size/2, this.y + this.size/2);
+                
+                // 如果有多层堆叠，显示层数指示器
+                if (this.stackHeight > 1) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 1;
+                    const indicatorSize = 8;
+                    const indicatorX = this.x + this.size - 10;
+                    const indicatorY = this.y + 5;
+                    
+                    ctx.fillRect(indicatorX, indicatorY, indicatorSize, indicatorSize);
+                    ctx.strokeRect(indicatorX, indicatorY, indicatorSize, indicatorSize);
+                    
+                    ctx.fillStyle = '#000';
+                    ctx.font = '10px Microsoft YaHei';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.stackHeight.toString(), indicatorX + indicatorSize/2, indicatorY + indicatorSize/2 + 1);
+                }
             }
             
             drawOctagon(centerX, centerY, radius) {
@@ -511,14 +529,20 @@
                 ctx.stroke();
             }
             
-            takeDamage() {
+            takeDamage(damageAmount = 1) {
                 if (this.stackHeight > 1) {
                     // 如果有多层，先减少堆叠层数
-                    this.stackHeight--;
+                    this.stackHeight -= damageAmount;
+                    if (this.stackHeight < 1) {
+                        this.stackHeight = 1;
+                        // 多余的伤害转为生命值伤害
+                        const excessDamage = Math.abs(this.stackHeight - 1);
+                        this.health -= excessDamage;
+                    }
                     return false; // 瓦片还存在
                 } else {
                     // 只剩一层时，减少生命值
-                    this.health--;
+                    this.health -= damageAmount;
                     if (this.health <= 0) {
                         this.active = false;
                         score++;
@@ -667,13 +691,11 @@
                     const distance = Math.sqrt(dx*dx + dy*dy);
                     
                     if (distance <= this.maxExplosionRadius) {
-                        // 根据距离计算伤害
+                        // 根据距离计算伤害 - 提升炸弹威力
                         const damageRatio = 1 - (distance / this.maxExplosionRadius);
-                        const damage = Math.max(1, Math.floor(3 * damageRatio)); // 限制炸弹伤害
+                        const damage = Math.max(2, Math.floor(6 * damageRatio)); // 提升炸弹威力：2-6伤害
                         
-                        for (let i = 0; i < damage; i++) {
-                            if (tile.takeDamage()) break;
-                        }
+                        tile.takeDamage(damage);
                     }
                 });
             }
@@ -765,8 +787,8 @@
                     const dy = this.y - (tile.y + tile.size/2);
                     const distance = Math.sqrt(dx*dx + dy*dy);
                     
-                    if (distance < 15 + tile.size/2) {
-                        tile.takeDamage();
+                    if (distance < this.radius + tile.size/2) {
+                        tile.takeDamage(2); // 回旋镖造成2点伤害
                     }
                 });
             }
@@ -834,10 +856,10 @@
                 
                 const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
                 
-                // 检查是否在相同位置已有瓦片（堆叠）
+                // 检查是否在相同位置已有瓦片（完全垂直堆叠）
                 let existingTile = null;
                 tiles.forEach(tile => {
-                    if (tile.active && Math.abs(tile.x - x) < 25 && Math.abs(tile.y - y) < 25) {
+                    if (tile.active && Math.abs(tile.x - x) < 5 && Math.abs(tile.y - y) < 5) {
                         existingTile = tile;
                     }
                 });
@@ -944,7 +966,14 @@
                     
                     if (bullet.checkCollision(tile)) {
                         bullet.active = false;
-                        tile.takeDamage();
+                        
+                        // 根据子弹类型造成不同伤害
+                        let damage = 1;
+                        if (bullet.type === 'laser') {
+                            damage = 3; // 激光炮威力更大
+                        }
+                        
+                        tile.takeDamage(damage);
                     }
                 });
             });

@@ -1512,7 +1512,7 @@
             const startX = (canvas.width - (tilesPerRow - 1) * tileSpacing) / 2;
             
             // 高等级时使用形状模式，否则使用传统模式
-            if (level >= 6 && Math.random() < 0.7) { // 6级开始，70%概率使用形状模式
+            if (level >= 3 && Math.random() < 0.8) { // 3级开始，80%概率使用形状模式
                 createShapedTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, yPosition);
             } else {
                 currentTilePattern = '传统';
@@ -1641,7 +1641,7 @@
                 case 'corridor':
                     // 中央留出走廊
                     for (let i = 0; i < tilesPerRow; i++) {
-                        if (i < center - 2 || i > center + 2) {
+                        if (i < center - 3 || i > center + 3) {
                             pattern[i] = true;
                         }
                     }
@@ -1649,7 +1649,7 @@
                     
                 case 'walls':
                     // 两侧墙壁
-                    for (let i = 0; i < 3; i++) {
+                    for (let i = 0; i < 2; i++) {
                         pattern[i] = true;
                         pattern[tilesPerRow - 1 - i] = true;
                     }
@@ -1657,7 +1657,7 @@
                     
                 case 'center':
                     // 中央集中
-                    for (let i = center - 3; i <= center + 3; i++) {
+                    for (let i = center - 2; i <= center + 2; i++) {
                         if (i >= 0 && i < tilesPerRow) {
                             pattern[i] = true;
                         }
@@ -1667,7 +1667,7 @@
                 case 'sides':
                     // 两侧集中，中央空白
                     for (let i = 0; i < tilesPerRow; i++) {
-                        if (i < tilesPerRow * 0.3 || i > tilesPerRow * 0.7) {
+                        if (i < tilesPerRow * 0.25 || i > tilesPerRow * 0.75) {
                             pattern[i] = true;
                         }
                     }
@@ -1676,7 +1676,7 @@
                 case 'gaps':
                     // 有间隙的模式
                     for (let i = 0; i < tilesPerRow; i++) {
-                        if (i % 3 !== 1) { // 每三个位置空一个
+                        if (i % 4 === 0 || i % 4 === 1) { // 2个瓦片，2个空隙
                             pattern[i] = true;
                         }
                     }

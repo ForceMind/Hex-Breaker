@@ -875,14 +875,19 @@
                 this.time = 0; // 用于计算弧线轨迹
                 this.maxTime = 120; // 总飞行时间（2秒）
                 this.hitTiles = new Set(); // 记录已经击中的瓦片，防止重复伤害
+                this.mode = 'arc'; // 'arc' = 弧线飞行, 'straight' = 直线飞行, 'returning' = 返回玩家
+                this.straightDirection = { x: 0, y: -1 }; // 直线飞行方向
+                this.canBeCaught = false; // 是否可以被玩家接住
+                this.killedTileThisFrame = false; // 本帧是否击杀了瓦片
             }
             
             update() {
                 this.angle += 0.4; // 回旋镖旋转
                 this.time++;
+                this.killedTileThisFrame = false;
                 
-                if (this.time <= this.maxTime) {
-                    // 计算弧线轨迹
+                if (this.mode === 'arc' && this.time <= this.maxTime) {
+                    // 弧线飞行模式
                     const progress = this.time / this.maxTime;
                     
                     // 使用抛物线方程创建弧线轨迹
@@ -897,20 +902,34 @@
                         // 后半段：返回
                         const returnProgress = (progress - 0.5) * 2;
                         this.x = this.startX - arcWidth + returnProgress * arcWidth;
+                        this.canBeCaught = true; // 返回阶段可以被接住
                     }
                     
                     // Y轴：抛物线轨迹
                     const yOffset = -4 * arcHeight * progress * (1 - progress);
                     this.y = this.startY + yOffset;
                     
+                } else if (this.mode === 'straight') {
+                    // 直线飞行模式
+                    this.x += this.straightDirection.x * this.speed;
+                    this.y += this.straightDirection.y * this.speed;
+                    
+                    // 飞出屏幕则消失
+                    if (this.x < -50 || this.x > canvas.width + 50 || this.y < -50 || this.y > canvas.height + 50) {
+                        this.active = false;
+                        return;
+                    }
                 } else {
-                    // 超时后回到玩家位置
+                    // 返回玩家模式
+                    this.mode = 'returning';
+                    this.canBeCaught = true;
                     const dx = this.startX - this.x;
                     const dy = player.y - this.y;
                     const distance = Math.sqrt(dx*dx + dy*dy);
                     
                     if (distance < 20) {
-                        this.active = false;
+                        // 检查玩家是否能接住回旋镖
+                        this.checkPlayerCatch();
                         return;
                     }
                     
@@ -918,7 +937,21 @@
                     this.y += (dy / distance) * this.speed * 1.5;
                 }
                 
-                // 检查与瓦片碰撞 - 回旋镖可以穿透瓦片
+                // 检查与瓦片碰撞
+                this.checkTileCollisions();
+                
+                // 检查是否需要切换到直线模式（击杀瓦片后）
+                if (this.killedTileThisFrame && this.mode === 'arc') {
+                    this.switchToStraightMode();
+                }
+                
+                // 如果回旋镖飞出屏幕太远，强制返回
+                if (this.mode === 'arc' && (this.x < -100 || this.x > canvas.width + 100 || this.y < -100)) {
+                    this.time = this.maxTime + 1;
+                }
+            }
+            
+            checkTileCollisions() {
                 tiles.forEach(tile => {
                     if (!tile.active) return;
                     
@@ -932,16 +965,66 @@
                         const tileId = `${tile.x}_${tile.y}_${tile.originalHealth || tile.health}`;
                         if (!this.hitTiles.has(tileId)) {
                             this.hitTiles.add(tileId);
+                            const wasAlive = tile.active;
                             tile.takeDamage(2); // 回旋镖造成2点伤害
+                            
+                            // 检查是否击杀了瓦片
+                            if (wasAlive && !tile.active) {
+                                this.killedTileThisFrame = true;
+                            }
                         }
-                        // 注意：这里没有停止回旋镖的飞行，它会继续按轨迹飞行
                     }
                 });
-                
-                // 如果回旋镖飞出屏幕太远，强制返回
-                if (this.x < -100 || this.x > canvas.width + 100 || this.y < -100) {
-                    this.time = this.maxTime + 1;
+            }
+            
+            switchToStraightMode() {
+                this.mode = 'straight';
+                this.canBeCaught = false;
+                // 计算当前的飞行方向
+                if (this.time <= this.maxTime) {
+                    const progress = this.time / this.maxTime;
+                    if (progress < 0.5) {
+                        // 前半段，继续向左前方飞行
+                        this.straightDirection = { x: -0.7, y: -0.7 };
+                    } else {
+                        // 后半段，改为向前飞行
+                        this.straightDirection = { x: 0, y: -1 };
+                    }
+                } else {
+                    // 默认向前
+                    this.straightDirection = { x: 0, y: -1 };
                 }
+                
+                // 重置击中瓦片记录，允许在直线模式下重新击中
+                this.hitTiles.clear();
+            }
+            
+            checkPlayerCatch() {
+                // 检查玩家是否在回旋镖附近
+                const dx = this.x - (player.x + player.width/2);
+                const dy = this.y - (player.y + player.height/2);
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                if (distance < 30 && this.canBeCaught) {
+                    // 玩家接住了回旋镖，重新发射
+                    this.relaunch();
+                } else {
+                    // 没接住，回旋镖消失
+                    this.active = false;
+                }
+            }
+            
+            relaunch() {
+                // 重新发射回旋镖
+                this.startX = player.x + player.width/2;
+                this.startY = player.y;
+                this.x = this.startX;
+                this.y = this.startY;
+                this.time = 0;
+                this.mode = 'arc';
+                this.canBeCaught = false;
+                this.hitTiles.clear(); // 清除击中记录，允许重新攻击
+                this.killedTileThisFrame = false;
             }
             
             draw() {
@@ -949,13 +1032,13 @@
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.angle);
                 
-                // 绘制回旋镖轨迹（可选）
-                if (this.time < this.maxTime) {
+                // 根据模式绘制不同的轨迹提示
+                if (this.mode === 'arc' && this.time < this.maxTime) {
+                    // 弧线模式：绘制弧线轨迹
                     ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
                     
-                    // 绘制预期轨迹的一小段
                     for (let i = 0; i < 20; i++) {
                         const futureTime = this.time + i;
                         if (futureTime > this.maxTime) break;
@@ -980,11 +1063,31 @@
                         }
                     }
                     ctx.stroke();
+                } else if (this.mode === 'straight') {
+                    // 直线模式：绘制直线轨迹
+                    ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(this.straightDirection.x * 100, this.straightDirection.y * 100);
+                    ctx.stroke();
                 }
                 
                 // 绘制回旋镖本体
-                ctx.fillStyle = '#ffff00';
-                ctx.strokeStyle = '#ff6600';
+                let boomerangColor = '#ffff00';
+                let strokeColor = '#ff6600';
+                
+                // 根据模式调整颜色
+                if (this.mode === 'straight') {
+                    boomerangColor = '#ff4444'; // 直线模式时变红
+                    strokeColor = '#cc0000';
+                } else if (this.canBeCaught) {
+                    boomerangColor = '#44ff44'; // 可接住时变绿
+                    strokeColor = '#00cc00';
+                }
+                
+                ctx.fillStyle = boomerangColor;
+                ctx.strokeStyle = strokeColor;
                 ctx.lineWidth = 2;
                 
                 // 绘制回旋镖形状（更真实的V形）

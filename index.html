@@ -885,24 +885,57 @@
                     // 随机掉落道具（多样化）
                     const dropChance = Math.min(0.25, 0.08 + level * 0.02);
                     if (Math.random() < dropChance) {
-                        // 分层掉落系统
-                        const commonItems = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'bigbomb', 'shield', 'boomerang'];
-                        const rareItems = ['diagonalbomb', 'horizontalbomb', 'linebomb'];
-                        const upgradeItems = ['doublebullets', 'speedboost', 'rapidfire', 'piercing', 'shieldbooster', 'magnet', 'bigbullets', 'weaponduration'];
-                        const lifeItems = ['extralife']; // 生命道具单独分类
+                        // 分级道具解锁系统
+                        let availableItems = [];
                         
-                        let randomItem;
-                        const rand = Math.random();
-                        
-                        if (rand < 0.05 && level >= 5) { // 5%概率掉落生命（5级后）
-                            randomItem = lifeItems[Math.floor(Math.random() * lifeItems.length)];
-                        } else if (rand < 0.15 && level >= 3) { // 10%概率掉落升级道具（3级后）
-                            randomItem = upgradeItems[Math.floor(Math.random() * upgradeItems.length)];
-                        } else if (rand < 0.35) { // 20%概率掉落稀有道具
-                            randomItem = rareItems[Math.floor(Math.random() * rareItems.length)];
-                        } else { // 65%概率掉落常见道具
-                            randomItem = commonItems[Math.floor(Math.random() * commonItems.length)];
+                        // 1-2级：基础道具
+                        if (level >= 1) {
+                            availableItems.push('uzi', 'bomb', 'shield');
                         }
+                        
+                        // 3-4级：扩展武器
+                        if (level >= 3) {
+                            availableItems.push('shotgun', 'boomerang');
+                        }
+                        
+                        // 5-6级：高级武器
+                        if (level >= 5) {
+                            availableItems.push('laser', 'bigbomb');
+                        }
+                        
+                        // 7-8级：散射武器和特殊炸弹
+                        if (level >= 7) {
+                            availableItems.push('spread', 'diagonalbomb', 'horizontalbomb');
+                        }
+                        
+                        // 9-10级：更多特殊炸弹
+                        if (level >= 9) {
+                            availableItems.push('linebomb');
+                        }
+                        
+                        // 11级+：永久增益道具逐步解锁
+                        if (level >= 11) {
+                            availableItems.push('speedboost', 'doublebullets');
+                        }
+                        
+                        if (level >= 13) {
+                            availableItems.push('rapidfire', 'bigbullets');
+                        }
+                        
+                        if (level >= 15) {
+                            availableItems.push('piercing', 'magnet');
+                        }
+                        
+                        if (level >= 18) {
+                            availableItems.push('shieldbooster', 'weaponduration');
+                        }
+                        
+                        if (level >= 20) {
+                            availableItems.push('extralife');
+                        }
+                        
+                        // 从可用道具中随机选择
+                        const randomItem = availableItems[Math.floor(Math.random() * availableItems.length)];
                         
                         itemDrops.push(new ItemDrop(this.x + this.size/2, this.y + this.size/2, randomItem));
                     }
@@ -1467,6 +1500,11 @@
         
         // 创建新的瓦片行
         function createNewTileRow() {
+            createNewTileRowAtPosition(-80);
+        }
+        
+        // 在指定Y位置创建新的瓦片行
+        function createNewTileRowAtPosition(yPosition) {
             // 计算瓦片数量铺满整个屏幕宽度
             const tileSize = 50;
             const tileSpacing = 55;
@@ -1475,19 +1513,23 @@
             
             // 高等级时使用形状模式，否则使用传统模式
             if (level >= 6 && Math.random() < 0.7) { // 6级开始，70%概率使用形状模式
-                createShapedTileRow(tilesPerRow, startX, tileSpacing, tileSize);
+                createShapedTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, yPosition);
             } else {
                 currentTilePattern = '传统';
                 document.getElementById('pattern').textContent = currentTilePattern;
-                createFullTileRow(tilesPerRow, startX, tileSpacing, tileSize);
+                createFullTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, yPosition);
             }
         }
         
         // 传统的满屏瓦片生成
         function createFullTileRow(tilesPerRow, startX, tileSpacing, tileSize) {
+            createFullTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, -80);
+        }
+        
+        function createFullTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, yPosition) {
             for (let col = 0; col < tilesPerRow; col++) {
                 const x = startX + col * tileSpacing - tileSize/2;
-                const y = -80; // 从屏幕顶部上方开始生成
+                const y = yPosition;
                 
                 // 根据等级调整数字范围：难度递增
                 let minHealth, maxHealth;
@@ -1522,6 +1564,10 @@
         
         // 形状模式瓦片生成
         function createShapedTileRow(tilesPerRow, startX, tileSpacing, tileSize) {
+            createShapedTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, -80);
+        }
+        
+        function createShapedTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, yPosition) {
             // 定义各种形状模式
             const patterns = [
                 'corridor',     // 走廊模式
@@ -1564,7 +1610,7 @@
                 // 只在模式允许的位置生成瓦片
                 if (patternMask[col]) {
                     const x = startX + col * tileSpacing - tileSize/2;
-                    const y = -80;
+                    const y = yPosition;
                     
                     // 根据等级调整数字范围
                     let minHealth, maxHealth;
@@ -1871,47 +1917,11 @@
             
             // 当最顶部的瓦片Y坐标大于0时（还在屏幕内但已经开始下移），立即生成新瓦片
             if (!hasActiveTiles || topMostY > 0) {
-                const tileSize = 50;
-                const tileSpacing = 55;
-                const tilesPerRow = Math.floor(canvas.width / tileSpacing);
-                const startX = (canvas.width - (tilesPerRow - 1) * tileSpacing) / 2;
-                
                 // 计算新瓦片的Y位置：紧贴最顶部瓦片上方
                 const newY = !hasActiveTiles ? 10 : topMostY - 55;
                 
-                // 直接在正确位置创建新瓦片
-                for (let col = 0; col < tilesPerRow; col++) {
-                    const x = startX + col * tileSpacing - tileSize/2;
-                    
-                    // 根据等级调整数字范围：难度递增
-                    let minHealth, maxHealth;
-                    if (level <= 2) {
-                        minHealth = 1;
-                        maxHealth = 3;
-                    } else if (level <= 4) {
-                        minHealth = 1;
-                        maxHealth = 5;
-                    } else if (level <= 6) {
-                        minHealth = 2;
-                        maxHealth = 7;
-                    } else if (level <= 8) {
-                        minHealth = 3;
-                        maxHealth = 9;
-                    } else if (level <= 10) {
-                        minHealth = 4;
-                        maxHealth = 12;
-                    } else if (level <= 15) {
-                        minHealth = 5;
-                        maxHealth = 15;
-                    } else {
-                        minHealth = Math.floor(level / 2);
-                        maxHealth = Math.min(25, level + 10);
-                    }
-                    
-                    const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
-                    const newTile = new Tile(x, newY, health);
-                    tiles.push(newTile);
-                }
+                // 使用形状生成系统
+                createNewTileRowAtPosition(newY);
             }
             
             // 清理超出屏幕下方的瓦片

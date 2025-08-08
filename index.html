@@ -451,7 +451,7 @@
                 this.health = health;
                 this.maxHealth = health;
                 this.active = true;
-                this.depth = 0; // 用于堆叠效果
+                this.stackHeight = 1; // 堆叠高度（替代depth）
             }
             
             update() {
@@ -464,26 +464,20 @@
             draw() {
                 if (!this.active) return;
                 
-                // 根据深度调整颜色（竖直堆叠效果）
-                const depthAlpha = Math.max(0.4, 1 - this.depth * 0.15);
-                
-                // 绘制竖直堆叠阴影
-                if (this.depth > 0) {
-                    for (let d = this.depth; d > 0; d--) {
-                        const shadowAlpha = depthAlpha * 0.3 * (d / this.depth);
-                        ctx.fillStyle = `rgba(70, 130, 180, ${shadowAlpha})`;
-                        this.drawOctagon(this.x + this.size/2, this.y + this.size/2 + d * 3, this.size/2);
-                    }
+                // 绘制堆叠的瓦片层
+                for (let layer = this.stackHeight - 1; layer >= 0; layer--) {
+                    const layerAlpha = Math.max(0.4, 1 - layer * 0.2);
+                    const offsetY = layer * 6; // 每层向下偏移6像素
+                    
+                    // 绘制八边形瓦片
+                    ctx.fillStyle = `rgba(135, 206, 235, ${layerAlpha})`;
+                    ctx.strokeStyle = `rgba(70, 130, 180, ${layerAlpha})`;
+                    ctx.lineWidth = 2;
+                    
+                    this.drawOctagon(this.x + this.size/2, this.y + this.size/2 + offsetY, this.size/2);
                 }
                 
-                // 绘制八边形瓦片
-                ctx.fillStyle = `rgba(135, 206, 235, ${depthAlpha})`;
-                ctx.strokeStyle = `rgba(70, 130, 180, ${depthAlpha})`;
-                ctx.lineWidth = 2;
-                
-                this.drawOctagon(this.x + this.size/2, this.y + this.size/2, this.size/2);
-                
-                // 绘制中文数字 - 移动端字体调整
+                // 绘制顶层的数字
                 const healthRatio = this.health / this.maxHealth;
                 if (healthRatio > 0.7) {
                     ctx.fillStyle = '#000';
@@ -518,30 +512,37 @@
             }
             
             takeDamage() {
-                this.health--;
-                if (this.health <= 0) {
-                    this.active = false;
-                    score++;
-                    document.getElementById('score').textContent = score;
-                    
-                    // 每摧毁8个瓦片升级
-                    if (score % 8 === 0) {
-                        level++;
-                        gameSpeed += 0.1;
-                        tileSpawnDelay = Math.max(45, tileSpawnDelay - 8); // 更频繁生成
-                        updateLevelDisplay();
+                if (this.stackHeight > 1) {
+                    // 如果有多层，先减少堆叠层数
+                    this.stackHeight--;
+                    return false; // 瓦片还存在
+                } else {
+                    // 只剩一层时，减少生命值
+                    this.health--;
+                    if (this.health <= 0) {
+                        this.active = false;
+                        score++;
+                        document.getElementById('score').textContent = score;
+                        
+                        // 每摧毁8个瓦片升级
+                        if (score % 8 === 0) {
+                            level++;
+                            gameSpeed += 0.1;
+                            tileSpawnDelay = Math.max(45, tileSpawnDelay - 8); // 更频繁生成
+                            updateLevelDisplay();
+                        }
+                        
+                        // 随机掉落道具（多样化）
+                        const dropChance = Math.min(0.25, 0.08 + level * 0.02);
+                        if (Math.random() < dropChance) {
+                            const itemTypes = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'shield', 'boomerang'];
+                            const randomItem = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+                            itemDrops.push(new ItemDrop(this.x + this.size/2, this.y + this.size/2, randomItem));
+                        }
+                        return true;
                     }
-                    
-                    // 随机掉落道具（多样化）
-                    const dropChance = Math.min(0.25, 0.08 + level * 0.02);
-                    if (Math.random() < dropChance) {
-                        const itemTypes = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'shield', 'boomerang'];
-                        const randomItem = itemTypes[Math.floor(Math.random() * itemTypes.length)];
-                        itemDrops.push(new ItemDrop(this.x + this.size/2, this.y + this.size/2, randomItem));
-                    }
-                    return true;
+                    return false;
                 }
-                return false;
             }
         }
         
@@ -668,7 +669,7 @@
                     if (distance <= this.maxExplosionRadius) {
                         // 根据距离计算伤害
                         const damageRatio = 1 - (distance / this.maxExplosionRadius);
-                        const damage = Math.max(1, Math.floor(tile.health * damageRatio * 0.8));
+                        const damage = Math.max(1, Math.floor(3 * damageRatio)); // 限制炸弹伤害
                         
                         for (let i = 0; i < damage; i++) {
                             if (tile.takeDamage()) break;
@@ -832,20 +833,27 @@
                 }
                 
                 const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
-                const newTile = new Tile(x, y, health);
                 
-                // 检查是否与现有瓦片重叠（竖直堆叠效果）
-                let depth = 0;
+                // 检查是否在相同位置已有瓦片（堆叠）
+                let existingTile = null;
                 tiles.forEach(tile => {
-                    if (tile.active && 
-                        Math.abs(tile.x - x) < 10 && // 更严格的X轴对齐
-                        tile.y > y - 55 && tile.y < y + 55) { // Y轴范围检查
-                        depth = Math.max(depth, tile.depth + 1);
+                    if (tile.active && Math.abs(tile.x - x) < 25 && Math.abs(tile.y - y) < 25) {
+                        existingTile = tile;
                     }
                 });
-                newTile.depth = depth;
                 
-                tiles.push(newTile);
+                if (existingTile && existingTile.stackHeight < 5) {
+                    // 如果位置已有瓦片且堆叠未满，增加堆叠高度
+                    existingTile.stackHeight++;
+                } else if (!existingTile) {
+                    // 如果位置没有瓦片，创建新瓦片
+                    const newTile = new Tile(x, y, health);
+                    // 随机决定是否创建堆叠（20%概率）
+                    if (Math.random() < 0.2 && level > 2) {
+                        newTile.stackHeight = Math.min(3, Math.floor(Math.random() * 2) + 1);
+                    }
+                    tiles.push(newTile);
+                }
             }
         }
         
@@ -1038,7 +1046,7 @@
             score = 0;
             level = 1;
             gameSpeed = 1;
-            tileSpawnTimer = 0;
+            tileSpawnTimer = 60; // 延迟第一次生成，避免与初始瓦片重叠
             tileSpawnDelay = 90;
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;
@@ -1051,19 +1059,21 @@
             boomerangs = [];
             bombs = [];
             
-            // 初始生成几行瓦片，从顶部逐行生成
-            for (let i = 0; i < 3; i++) {
-                setTimeout(() => {
-                    createNewTileRow();
-                    // 调整初始瓦片位置，确保从顶部开始
-                    const tileSize = 50;
-                    const tileSpacing = 55;
-                    const tilesPerRow = Math.floor(canvas.width / tileSpacing);
-                    const latestTiles = tiles.slice(-tilesPerRow);
-                    latestTiles.forEach(tile => {
-                        tile.y = i * 60 + 10; // 从顶部区域开始
-                    });
-                }, i * 200);
+            // 初始生成3行瓦片，确保连续无空隙
+            const tileSize = 50;
+            const tileSpacing = 55;
+            const tilesPerRow = Math.floor(canvas.width / tileSpacing);
+            const startX = (canvas.width - (tilesPerRow - 1) * tileSpacing) / 2;
+            
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < tilesPerRow; col++) {
+                    const x = startX + col * tileSpacing - tileSize/2;
+                    const y = row * 60 + 10; // 确保连续排列
+                    const health = Math.floor(Math.random() * 3) + 1; // 初始简单数字
+                    
+                    const newTile = new Tile(x, y, health);
+                    tiles.push(newTile);
+                }
             }
         }
         

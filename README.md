@@ -48,7 +48,7 @@
    # PHP
    php -S localhost:8000
    ```
-3. 打开浏览器访问 `https://forcemind.github.io/Hex-Breaker/`
+3. 打开浏览器访问 (https://forcemind.github.io/Hex-Breaker//
 
 ### 本地文件
 也可以直接双击 `index.html` 文件在浏览器中打开（某些浏览器可能有跨域限制）。

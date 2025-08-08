@@ -381,47 +381,65 @@
                             break;
                             
                         case 'uzi':
-                            bullets.push(new Bullet(centerX, centerY, 'normal'));
-                            if (this.doubleBullets) {
-                                bullets.push(new Bullet(centerX - 6, centerY, 'normal'));
-                                bullets.push(new Bullet(centerX + 6, centerY, 'normal'));
+                            // 冲锋枪：等级越高射速越快，高等级有多发子弹
+                            const uziBullets = weapon.level >= 3 ? 2 : 1; // 3级以上双发
+                            for (let b = 0; b < uziBullets; b++) {
+                                bullets.push(new Bullet(centerX + (b - 0.5) * 8, centerY - b * 5, 'normal'));
                             }
-                            weaponCooldown = Math.floor(Math.max(4, 12 - weapon.level * 2) * cooldownMultiplier);
+                            if (this.doubleBullets) {
+                                for (let b = 0; b < uziBullets; b++) {
+                                    bullets.push(new Bullet(centerX - 6 + (b - 0.5) * 8, centerY - b * 5, 'normal'));
+                                    bullets.push(new Bullet(centerX + 6 + (b - 0.5) * 8, centerY - b * 5, 'normal'));
+                                }
+                            }
+                            weaponCooldown = Math.floor(Math.max(4, 16 - weapon.level * 2) * cooldownMultiplier);
                             break;
                             
                         case 'shotgun':
-                            const shotgunSpread = Math.min(2 + weapon.level, 5);
+                            // 霰弹枪：等级越高散弹越多，高等级有更大威力
+                            const shotgunSpread = Math.min(2 + weapon.level, 7);
+                            const shotgunDamage = weapon.level >= 4 ? 'big' : 'normal'; // 4级以上大子弹
                             for (let i = -(shotgunSpread-1)/2; i <= (shotgunSpread-1)/2; i++) {
-                                bullets.push(new Bullet(centerX + i * 15, centerY, 'normal', i * 0.5));
+                                bullets.push(new Bullet(centerX + i * 12, centerY, shotgunDamage, i * 0.4));
                             }
                             if (this.doubleBullets) {
                                 for (let i = -(shotgunSpread-1)/2; i <= (shotgunSpread-1)/2; i++) {
-                                    bullets.push(new Bullet(centerX + i * 15, centerY - 10, 'normal', i * 0.5));
+                                    bullets.push(new Bullet(centerX + i * 12, centerY - 8, shotgunDamage, i * 0.4));
                                 }
                             }
-                            weaponCooldown = Math.floor(30 * cooldownMultiplier);
+                            weaponCooldown = Math.floor(Math.max(20, 35 - weapon.level * 2) * cooldownMultiplier);
                             break;
                             
                         case 'laser':
-                            bullets.push(new Bullet(centerX, centerY, 'laser'));
-                            if (this.doubleBullets) {
-                                bullets.push(new Bullet(centerX - 10, centerY, 'laser'));
-                                bullets.push(new Bullet(centerX + 10, centerY, 'laser'));
+                            // 激光炮：等级越高威力越大，高等级有穿透效果
+                            const laserType = weapon.level >= 3 ? 'big' : 'laser';
+                            const laserCount = weapon.level >= 5 ? 3 : 1; // 5级三发激光
+                            for (let l = 0; l < laserCount; l++) {
+                                bullets.push(new Bullet(centerX + (l - 1) * 15, centerY - l * 3, laserType));
                             }
-                            weaponCooldown = Math.floor(Math.max(8, 18 - weapon.level * 2) * cooldownMultiplier);
+                            if (this.doubleBullets) {
+                                for (let l = 0; l < laserCount; l++) {
+                                    bullets.push(new Bullet(centerX - 10 + (l - 1) * 15, centerY - l * 3, laserType));
+                                    bullets.push(new Bullet(centerX + 10 + (l - 1) * 15, centerY - l * 3, laserType));
+                                }
+                            }
+                            weaponCooldown = Math.floor(Math.max(6, 20 - weapon.level * 2) * cooldownMultiplier);
                             break;
                             
                         case 'spread':
-                            const spreadCount = Math.min(3 + weapon.level, 7);
+                            // 散射枪：等级越高子弹越多，高等级子弹更快更大
+                            const spreadCount = Math.min(3 + weapon.level, 9);
+                            const spreadType = weapon.level >= 4 ? 'normal' : 'small'; // 4级以上普通子弹
+                            const spreadAngle = weapon.level >= 3 ? 0.4 : 0.3; // 3级以上扩散更大
                             for (let i = -(spreadCount-1)/2; i <= (spreadCount-1)/2; i++) {
-                                bullets.push(new Bullet(centerX, centerY, 'small', i * 0.3));
+                                bullets.push(new Bullet(centerX, centerY, spreadType, i * spreadAngle));
                             }
                             if (this.doubleBullets) {
                                 for (let i = -(spreadCount-1)/2; i <= (spreadCount-1)/2; i++) {
-                                    bullets.push(new Bullet(centerX, centerY - 8, 'small', i * 0.3));
+                                    bullets.push(new Bullet(centerX, centerY - 6, spreadType, i * spreadAngle));
                                 }
                             }
-                            weaponCooldown = Math.floor(25 * cooldownMultiplier);
+                            weaponCooldown = Math.floor(Math.max(15, 30 - weapon.level * 2) * cooldownMultiplier);
                             break;
                     }
                     
@@ -477,11 +495,11 @@
                     case 'laser':
                     case 'spread':
                         if (this.weapons[itemType].active) {
-                            // 相同武器升级
+                            // 相同武器升级并重置时间
                             this.weapons[itemType].level = Math.min(this.weapons[itemType].level + 1, 5); // 最高5级
-                            const bonusTime = this.calculateWeaponDuration(itemType) * 0.5; // 升级奖励50%时间
-                            this.weapons[itemType].duration += bonusTime;
-                            this.weapons[itemType].maxDuration += bonusTime;
+                            const newDuration = this.calculateWeaponDuration(itemType);
+                            this.weapons[itemType].duration = newDuration; // 重置时间，不叠加
+                            this.weapons[itemType].maxDuration = newDuration;
                         } else {
                             // 激活新武器
                             const baseDuration = this.calculateWeaponDuration(itemType);

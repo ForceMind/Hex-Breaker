@@ -1378,21 +1378,21 @@
                     const progress = this.time / this.maxTime;
                     
                     // 使用抛物线方程创建弧线轨迹
-                    const arcHeight = 150; // 弧线最高点
-                    const arcWidth = 200;  // 弧线最远点
+                    const arcHeight = 120; // 弧线最高点
+                    const arcWidth = 150;  // 弧线最远点
                     
-                    // X轴：先向左移动，然后返回
-                    if (progress < 0.5) {
-                        // 前半段：向左移动
-                        this.x = this.startX - (progress * 2) * arcWidth;
+                    // X轴：先向前偏左移动，然后返回
+                    if (progress < 0.6) {
+                        // 前60%：向前偏左移动
+                        this.x = this.startX - (progress * 1.5) * arcWidth;
                     } else {
-                        // 后半段：返回
-                        const returnProgress = (progress - 0.5) * 2;
-                        this.x = this.startX - arcWidth + returnProgress * arcWidth;
+                        // 后40%：返回玩家
+                        const returnProgress = (progress - 0.6) * 2.5;
+                        this.x = this.startX - arcWidth * 0.9 + returnProgress * arcWidth * 0.9;
                         this.canBeCaught = true; // 返回阶段可以被接住
                     }
                     
-                    // Y轴：抛物线轨迹
+                    // Y轴：抛物线轨迹，主要向上飞行
                     const yOffset = -4 * arcHeight * progress * (1 - progress);
                     this.y = this.startY + yOffset;
                     
@@ -1427,8 +1427,8 @@
                 // 检查与瓦片碰撞
                 this.checkTileCollisions();
                 
-                // 检查是否需要切换到直线模式（击杀瓦片后）
-                if (this.killedTileThisFrame && this.mode === 'arc') {
+                // 检查是否需要切换到直线模式（只有在弧线飞行的后半段击杀瓦片才切换）
+                if (this.killedTileThisFrame && this.mode === 'arc' && this.time > this.maxTime * 0.3) {
                     this.switchToStraightMode();
                 }
                 
@@ -1467,20 +1467,13 @@
             switchToStraightMode() {
                 this.mode = 'straight';
                 this.canBeCaught = false;
-                // 计算当前的飞行方向
-                if (this.time <= this.maxTime) {
-                    const progress = this.time / this.maxTime;
-                    if (progress < 0.5) {
-                        // 前半段，继续向左前方飞行
-                        this.straightDirection = { x: -0.7, y: -0.7 };
-                    } else {
-                        // 后半段，改为向前飞行
-                        this.straightDirection = { x: 0, y: -1 };
-                    }
-                } else {
-                    // 默认向前
-                    this.straightDirection = { x: 0, y: -1 };
-                }
+                
+                // 计算朝向屏幕上方的飞行方向
+                // 根据当前位置调整方向，让回旋镖飞向屏幕上方
+                const centerX = canvas.width / 2;
+                const towardCenter = this.x > centerX ? -0.3 : 0.3; // 稍微向屏幕中心偏移
+                
+                this.straightDirection = { x: towardCenter, y: -1 }; // 主要向上，稍微调整水平方向
                 
                 // 重置击中瓦片记录，允许在直线模式下重新击中
                 this.hitTiles.clear();

@@ -451,33 +451,39 @@
                 this.health = health;
                 this.maxHealth = health;
                 this.active = true;
-                this.stackHeight = 1; // 堆叠高度（替代depth）
+                // 根据生命值决定厚度层数
+                this.thickness = Math.min(health, 8); // 最多8层厚度
             }
             
             update() {
                 // 瓦片向下移动
                 this.y += gameSpeed * 0.3;
                 
-                // 不需要检查底部碰撞，由玩家类处理
+                // 根据当前生命值更新厚度
+                this.thickness = Math.min(this.health, 8);
             }
             
             draw() {
                 if (!this.active) return;
                 
-                // 绘制堆叠的瓦片层 - 完全垂直叠放
-                for (let layer = this.stackHeight - 1; layer >= 0; layer--) {
-                    const layerAlpha = Math.max(0.4, 1 - layer * 0.15);
-                    const offsetY = layer * 4; // 减少偏移，更紧密堆叠
+                // 绘制厚度层 - 从下往上绘制
+                for (let layer = this.thickness - 1; layer >= 0; layer--) {
+                    const layerDepth = layer * 3; // 每层3像素厚度
+                    const layerAlpha = Math.max(0.3, 1 - layer * 0.08);
                     
-                    // 绘制八边形瓦片
+                    // 计算当前层的位置（向左上偏移创造3D效果）
+                    const layerX = this.x + this.size/2 - layerDepth * 0.3;
+                    const layerY = this.y + this.size/2 - layerDepth * 0.3;
+                    
+                    // 绘制八边形瓦片层
                     ctx.fillStyle = `rgba(135, 206, 235, ${layerAlpha})`;
                     ctx.strokeStyle = `rgba(70, 130, 180, ${layerAlpha})`;
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 1.5;
                     
-                    this.drawOctagon(this.x + this.size/2, this.y + this.size/2 + offsetY, this.size/2);
+                    this.drawOctagon(layerX, layerY, this.size/2);
                 }
                 
-                // 绘制顶层的数字
+                // 绘制顶层的数字（在最顶层）
                 const healthRatio = this.health / this.maxHealth;
                 if (healthRatio > 0.7) {
                     ctx.fillStyle = '#000';
@@ -491,25 +497,12 @@
                 ctx.font = `bold ${fontSize} Microsoft YaHei`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(this.health.toString(), this.x + this.size/2, this.y + this.size/2);
                 
-                // 如果有多层堆叠，显示层数指示器
-                if (this.stackHeight > 1) {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.strokeStyle = '#000000';
-                    ctx.lineWidth = 1;
-                    const indicatorSize = 8;
-                    const indicatorX = this.x + this.size - 10;
-                    const indicatorY = this.y + 5;
-                    
-                    ctx.fillRect(indicatorX, indicatorY, indicatorSize, indicatorSize);
-                    ctx.strokeRect(indicatorX, indicatorY, indicatorSize, indicatorSize);
-                    
-                    ctx.fillStyle = '#000';
-                    ctx.font = '10px Microsoft YaHei';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(this.stackHeight.toString(), indicatorX + indicatorSize/2, indicatorY + indicatorSize/2 + 1);
-                }
+                // 数字显示在最顶层
+                const topLayerDepth = (this.thickness - 1) * 3;
+                const numberX = this.x + this.size/2 - topLayerDepth * 0.3;
+                const numberY = this.y + this.size/2 - topLayerDepth * 0.3;
+                ctx.fillText(this.health.toString(), numberX, numberY);
             }
             
             drawOctagon(centerX, centerY, radius) {
@@ -530,43 +523,30 @@
             }
             
             takeDamage(damageAmount = 1) {
-                if (this.stackHeight > 1) {
-                    // 如果有多层，先减少堆叠层数
-                    this.stackHeight -= damageAmount;
-                    if (this.stackHeight < 1) {
-                        this.stackHeight = 1;
-                        // 多余的伤害转为生命值伤害
-                        const excessDamage = Math.abs(this.stackHeight - 1);
-                        this.health -= excessDamage;
+                this.health -= damageAmount;
+                if (this.health <= 0) {
+                    this.active = false;
+                    score++;
+                    document.getElementById('score').textContent = score;
+                    
+                    // 每摧毁8个瓦片升级
+                    if (score % 8 === 0) {
+                        level++;
+                        gameSpeed += 0.1;
+                        tileSpawnDelay = Math.max(45, tileSpawnDelay - 8); // 更频繁生成
+                        updateLevelDisplay();
                     }
-                    return false; // 瓦片还存在
-                } else {
-                    // 只剩一层时，减少生命值
-                    this.health -= damageAmount;
-                    if (this.health <= 0) {
-                        this.active = false;
-                        score++;
-                        document.getElementById('score').textContent = score;
-                        
-                        // 每摧毁8个瓦片升级
-                        if (score % 8 === 0) {
-                            level++;
-                            gameSpeed += 0.1;
-                            tileSpawnDelay = Math.max(45, tileSpawnDelay - 8); // 更频繁生成
-                            updateLevelDisplay();
-                        }
-                        
-                        // 随机掉落道具（多样化）
-                        const dropChance = Math.min(0.25, 0.08 + level * 0.02);
-                        if (Math.random() < dropChance) {
-                            const itemTypes = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'shield', 'boomerang'];
-                            const randomItem = itemTypes[Math.floor(Math.random() * itemTypes.length)];
-                            itemDrops.push(new ItemDrop(this.x + this.size/2, this.y + this.size/2, randomItem));
-                        }
-                        return true;
+                    
+                    // 随机掉落道具（多样化）
+                    const dropChance = Math.min(0.25, 0.08 + level * 0.02);
+                    if (Math.random() < dropChance) {
+                        const itemTypes = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'shield', 'boomerang'];
+                        const randomItem = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+                        itemDrops.push(new ItemDrop(this.x + this.size/2, this.y + this.size/2, randomItem));
                     }
-                    return false;
+                    return true;
                 }
+                return false;
             }
         }
         
@@ -855,27 +835,8 @@
                 }
                 
                 const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
-                
-                // 检查是否在相同位置已有瓦片（完全垂直堆叠）
-                let existingTile = null;
-                tiles.forEach(tile => {
-                    if (tile.active && Math.abs(tile.x - x) < 5 && Math.abs(tile.y - y) < 5) {
-                        existingTile = tile;
-                    }
-                });
-                
-                if (existingTile && existingTile.stackHeight < 5) {
-                    // 如果位置已有瓦片且堆叠未满，增加堆叠高度
-                    existingTile.stackHeight++;
-                } else if (!existingTile) {
-                    // 如果位置没有瓦片，创建新瓦片
-                    const newTile = new Tile(x, y, health);
-                    // 随机决定是否创建堆叠（20%概率）
-                    if (Math.random() < 0.2 && level > 2) {
-                        newTile.stackHeight = Math.min(3, Math.floor(Math.random() * 2) + 1);
-                    }
-                    tiles.push(newTile);
-                }
+                const newTile = new Tile(x, y, health);
+                tiles.push(newTile);
             }
         }
         

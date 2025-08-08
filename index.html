@@ -154,7 +154,7 @@
         <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div id="gameInfo">
             <div>得分: <span id="score">0</span> | 等级: <span id="level">1</span> | 生命: <span id="lives">3</span></div>
-            <div>武器: <span id="weapon">默认</span></div>
+            <div>武器: <span id="weapon">默认</span> | 模式: <span id="pattern">传统</span></div>
             <div id="upgrades" style="font-size: 12px; color: #666; margin-top: 5px;">
                 永久增益: <span id="upgradeList">无</span>
             </div>
@@ -208,6 +208,7 @@
         let gameSpeed = 1;
         let level = 1;
         let lives = 3; // 玩家生命值
+        let currentTilePattern = '传统'; // 当前瓦片模式
         // 不再需要瓦片生成计时器，改为基于位置检测
         
         // 玩家类
@@ -1448,6 +1449,18 @@
             const tilesPerRow = Math.floor(canvas.width / tileSpacing);
             const startX = (canvas.width - (tilesPerRow - 1) * tileSpacing) / 2;
             
+            // 高等级时使用形状模式，否则使用传统模式
+            if (level >= 6 && Math.random() < 0.7) { // 6级开始，70%概率使用形状模式
+                createShapedTileRow(tilesPerRow, startX, tileSpacing, tileSize);
+            } else {
+                currentTilePattern = '传统';
+                document.getElementById('pattern').textContent = currentTilePattern;
+                createFullTileRow(tilesPerRow, startX, tileSpacing, tileSize);
+            }
+        }
+        
+        // 传统的满屏瓦片生成
+        function createFullTileRow(tilesPerRow, startX, tileSpacing, tileSize) {
             for (let col = 0; col < tilesPerRow; col++) {
                 const x = startX + col * tileSpacing - tileSize/2;
                 const y = -80; // 从屏幕顶部上方开始生成
@@ -1481,6 +1494,208 @@
                 const newTile = new Tile(x, y, health);
                 tiles.push(newTile);
             }
+        }
+        
+        // 形状模式瓦片生成
+        function createShapedTileRow(tilesPerRow, startX, tileSpacing, tileSize) {
+            // 定义各种形状模式
+            const patterns = [
+                'corridor',     // 走廊模式
+                'walls',        // 两侧墙壁
+                'center',       // 中央集中
+                'sides',        // 两侧集中
+                'gaps',         // 有间隙的模式
+                'zigzag',       // 之字形
+                'diamond',      // 菱形
+                'wave',         // 波浪形
+                'tunnel',       // 隧道模式
+                'stairs',       // 阶梯模式
+                'cross',        // 十字形
+                'random',       // 随机散布
+                'barrier'       // 障碍模式
+            ];
+            
+            const patternNames = {
+                'corridor': '走廊',
+                'walls': '墙壁',
+                'center': '中央',
+                'sides': '两侧',
+                'gaps': '间隙',
+                'zigzag': '之字',
+                'diamond': '菱形',
+                'wave': '波浪',
+                'tunnel': '隧道',
+                'stairs': '阶梯',
+                'cross': '十字',
+                'random': '随机',
+                'barrier': '障碍'
+            };
+            
+            const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+            currentTilePattern = patternNames[pattern];
+            document.getElementById('pattern').textContent = currentTilePattern;
+            const patternMask = generatePattern(pattern, tilesPerRow);
+            
+            for (let col = 0; col < tilesPerRow; col++) {
+                // 只在模式允许的位置生成瓦片
+                if (patternMask[col]) {
+                    const x = startX + col * tileSpacing - tileSize/2;
+                    const y = -80;
+                    
+                    // 根据等级调整数字范围
+                    let minHealth, maxHealth;
+                    if (level <= 10) {
+                        minHealth = 3;
+                        maxHealth = 9;
+                    } else if (level <= 15) {
+                        minHealth = 5;
+                        maxHealth = 15;
+                    } else {
+                        minHealth = Math.floor(level / 2);
+                        maxHealth = Math.min(25, level + 10);
+                    }
+                    
+                    const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
+                    const newTile = new Tile(x, y, health);
+                    tiles.push(newTile);
+                }
+            }
+        }
+        
+        // 生成不同的形状模式
+        function generatePattern(patternType, tilesPerRow) {
+            const pattern = new Array(tilesPerRow).fill(false);
+            const center = Math.floor(tilesPerRow / 2);
+            
+            switch(patternType) {
+                case 'corridor':
+                    // 中央留出走廊
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (i < center - 2 || i > center + 2) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'walls':
+                    // 两侧墙壁
+                    for (let i = 0; i < 3; i++) {
+                        pattern[i] = true;
+                        pattern[tilesPerRow - 1 - i] = true;
+                    }
+                    break;
+                    
+                case 'center':
+                    // 中央集中
+                    for (let i = center - 3; i <= center + 3; i++) {
+                        if (i >= 0 && i < tilesPerRow) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'sides':
+                    // 两侧集中，中央空白
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (i < tilesPerRow * 0.3 || i > tilesPerRow * 0.7) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'gaps':
+                    // 有间隙的模式
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (i % 3 !== 1) { // 每三个位置空一个
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'zigzag':
+                    // 之字形
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if ((i % 4 === 0) || (i % 4 === 1)) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'diamond':
+                    // 菱形
+                    const diamondSize = Math.min(4, Math.floor(tilesPerRow / 3));
+                    for (let i = center - diamondSize; i <= center + diamondSize; i++) {
+                        if (i >= 0 && i < tilesPerRow) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'wave':
+                    // 波浪形
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (Math.sin(i * 0.8) > 0) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'tunnel':
+                    // 隧道模式 - 上下有瓦片，中间留通道
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (i < 2 || i > tilesPerRow - 3) {
+                            pattern[i] = true;
+                        } else if (Math.random() < 0.3) { // 30%概率在通道中放置少量瓦片
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'stairs':
+                    // 阶梯模式
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (i % 2 === 0 && i < tilesPerRow * 0.8) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'cross':
+                    // 十字形
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (i === center || i === center - 1 || i === center + 1) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'random':
+                    // 随机散布 - 约50%密度
+                    for (let i = 0; i < tilesPerRow; i++) {
+                        if (Math.random() < 0.5) {
+                            pattern[i] = true;
+                        }
+                    }
+                    break;
+                    
+                case 'barrier':
+                    // 障碍模式 - 在某些位置放置较密集的障碍
+                    const barrierPositions = [
+                        Math.floor(tilesPerRow * 0.2),
+                        Math.floor(tilesPerRow * 0.5),
+                        Math.floor(tilesPerRow * 0.8)
+                    ];
+                    barrierPositions.forEach(pos => {
+                        for (let i = pos - 1; i <= pos + 1; i++) {
+                            if (i >= 0 && i < tilesPerRow) {
+                                pattern[i] = true;
+                            }
+                        }
+                    });
+                    break;
+            }
+            
+            return pattern;
         }
         
         // 更新等级显示

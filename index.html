@@ -1034,13 +1034,13 @@
                 createNewTileRow();
                 tileSpawnTimer = 0;
                 
-                // 调整新生成瓦片的Y位置，确保连续
+                // 调整新生成瓦片的Y位置，确保连续无空隙
                 const tileSize = 50;
                 const tileSpacing = 55;
                 const tilesPerRow = Math.floor(canvas.width / tileSpacing);
                 const latestTiles = tiles.slice(-tilesPerRow);
                 
-                // 计算应该的Y位置（基于现有最高瓦片）
+                // 找到最上方的瓦片Y位置
                 let topMostY = canvas.height;
                 tiles.forEach(tile => {
                     if (tile.active && tile.y < topMostY) {
@@ -1048,9 +1048,9 @@
                     }
                 });
                 
-                // 将新瓦片放在最高瓦片上方
+                // 将新瓦片紧贴在最高瓦片上方（55像素间距，确保紧密连接）
                 latestTiles.forEach(tile => {
-                    tile.y = topMostY - 60;
+                    tile.y = topMostY - 55;
                 });
             }
             
@@ -1119,7 +1119,7 @@
             level = 1;
             gameSpeed = 1;
             tileSpawnTimer = 0; // 立即开始生成，避免空行
-            tileSpawnDelay = 90;
+            tileSpawnDelay = 75; // 减少生成间隔，更频繁生成以避免空隙
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;
             document.getElementById('weapon').textContent = '默认';
@@ -1140,7 +1140,7 @@
             for (let row = 0; row < 3; row++) {
                 for (let col = 0; col < tilesPerRow; col++) {
                     const x = startX + col * tileSpacing - tileSize/2;
-                    const y = row * 60 + 10; // 确保连续排列
+                    const y = row * 55 + 10; // 改为55像素间距，与后续生成保持一致
                     const health = Math.floor(Math.random() * 3) + 1; // 初始简单数字
                     
                     const newTile = new Tile(x, y, health);

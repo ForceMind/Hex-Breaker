@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>六边形破坏者 - Hex Breaker</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        
+        #gameContainer {
+            text-align: center;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        #gameCanvas {
+            border: 2px solid #333;
+            background: white;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        #gameInfo {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #333;
+        }
+        
+        #controls {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>六边形破坏者</h1>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="gameInfo">
+            <div>得分: <span id="score">0</span> | 等级: <span id="level">1</span></div>
+            <div>武器: <span id="weapon">默认</span></div>
+        </div>
+        <div id="controls">
+            使用左右箭头键移动 | 空格键开始游戏
+        </div>
+    </div>
+
+    <script>
+        // 游戏画布和上下文
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 游戏状态
+        let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
+        let score = 0;
+        let gameSpeed = 1;
+        let level = 1;
+        let tileSpawnTimer = 0;
+        let tileSpawnDelay = 60; // 连续生成瓦片
+        let nextRowY = -60; // 下一行瓦片的Y位置
+        
+        // 玩家类
+        class Player {
+            constructor() {
+                this.width = 40;
+                this.height = 40;
+                this.x = canvas.width / 2 - this.width / 2;
+                this.y = canvas.height - this.height - 20;
+                this.speed = 5;
+                this.weapon = 'default';
+                this.weaponCooldown = 0;
+                this.weaponDuration = 0;
+                this.shield = false;
+                this.shieldDuration = 0;
+            }
+            
+            update() {
+                // 更新武器状态
+                if (this.weaponDuration > 0) {
+                    this.weaponDuration--;
+                    if (this.weaponDuration <= 0) {
+                        this.weapon = 'default';
+                        document.getElementById('weapon').textContent = '默认';
+                    }
+                }
+                
+                // 更新护盾状态
+                if (this.shieldDuration > 0) {
+                    this.shieldDuration--;
+                    if (this.shieldDuration <= 0) {
+                        this.shield = false;
+                    }
+                }
+                
+                // 武器冷却
+                if (this.weaponCooldown > 0) {
+                    this.weaponCooldown--;
+                }
+                
+                // 自动射击
+                this.shoot();
+                
+                // 检查与瓦片碰撞
+                this.checkTileCollision();
+            }
+            
+            draw() {
+                // 绘制护盾效果
+                if (this.shield) {
+                    ctx.strokeStyle = '#00ffff';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width/2, this.y + this.height/2, 30, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                // 绘制玩家（黄色方块带光晕）
+                ctx.shadowColor = '#ffff00';
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = '#ffdd00';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.shadowBlur = 0;
+                
+                // 绘制武器标签
+                if (this.weapon !== 'default') {
+                    ctx.fillStyle = '#00ff00';
+                    ctx.font = '14px Microsoft YaHei';
+                    ctx.textAlign = 'center';
+                    const weaponNames = {
+                        'uzi': '冲锋枪',
+                        'shotgun': '霰弹枪',
+                        'laser': '激光炮',
+                        'spread': '散射枪'
+                    };
+                    ctx.fillText(weaponNames[this.weapon] || this.weapon, this.x + this.width/2, this.y - 10);
+                }
+            }
+            
+            moveLeft() {
+                if (this.x > 0) {
+                    this.x -= this.speed;
+                }
+            }
+            
+            moveRight() {
+                if (this.x < canvas.width - this.width) {
+                    this.x += this.speed;
+                }
+            }
+            
+            shoot() {
+                if (this.weaponCooldown > 0) return;
+                
+                const centerX = this.x + this.width/2;
+                const centerY = this.y;
+                
+                switch(this.weapon) {
+                    case 'default':
+                        bullets.push(new Bullet(centerX, centerY, 'normal'));
+                        this.weaponCooldown = 20;
+                        break;
+                    case 'uzi':
+                        bullets.push(new Bullet(centerX, centerY, 'normal'));
+                        this.weaponCooldown = 8;
+                        break;
+                    case 'shotgun':
+                        for (let i = -1; i <= 1; i++) {
+                            bullets.push(new Bullet(centerX + i * 15, centerY, 'normal', i * 0.5));
+                        }
+                        this.weaponCooldown = 30;
+                        break;
+                    case 'laser':
+                        bullets.push(new Bullet(centerX, centerY, 'laser'));
+                        this.weaponCooldown = 15;
+                        break;
+                    case 'spread':
+                        for (let i = -2; i <= 2; i++) {
+                            bullets.push(new Bullet(centerX, centerY, 'small', i * 0.3));
+                        }
+                        this.weaponCooldown = 25;
+                        break;
+                }
+            }
+            
+            checkTileCollision() {
+                if (this.shield) return; // 护盾保护
+                
+                tiles.forEach(tile => {
+                    if (!tile.active) return;
+                    
+                    if (this.x < tile.x + tile.size &&
+                        this.x + this.width > tile.x &&
+                        this.y < tile.y + tile.size &&
+                        this.y + this.height > tile.y) {
+                        gameState = 'gameOver';
+                    }
+                });
+            }
+            
+            pickupItem(itemType) {
+                switch(itemType) {
+                    case 'uzi':
+                    case 'shotgun':
+                    case 'laser':
+                    case 'spread':
+                        this.weapon = itemType;
+                        this.weaponDuration = 600;
+                        const weaponNames = {
+                            'uzi': '冲锋枪',
+                            'shotgun': '霰弹枪',
+                            'laser': '激光炮',
+                            'spread': '散射枪'
+                        };
+                        document.getElementById('weapon').textContent = weaponNames[itemType];
+                        break;
+                    case 'bomb':
+                        this.useBomb();
+                        break;
+                    case 'shield':
+                        this.shield = true;
+                        this.shieldDuration = 300; // 5秒护盾
+                        break;
+                    case 'boomerang':
+                        this.throwBoomerang();
+                        break;
+                }
+            }
+            
+            useBomb() {
+                // 炸弹清除屏幕上半部分的瓦片
+                tiles.forEach(tile => {
+                    if (tile.y < canvas.height / 2) {
+                        tile.active = false;
+                        score++;
+                    }
+                });
+                document.getElementById('score').textContent = score;
+            }
+            
+            throwBoomerang() {
+                // 创建回旋镖
+                boomerangs.push(new Boomerang(this.x + this.width/2, this.y));
+            }
+        }
+        
+        // 子弹类
+        class Bullet {
+            constructor(x, y, type = 'normal', angleOffset = 0) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.angleOffset = angleOffset;
+                this.speed = type === 'laser' ? 12 : 8;
+                this.active = true;
+                
+                switch(type) {
+                    case 'normal':
+                        this.radius = 4;
+                        this.color = '#00ff00';
+                        break;
+                    case 'laser':
+                        this.radius = 6;
+                        this.color = '#ff0066';
+                        break;
+                    case 'small':
+                        this.radius = 3;
+                        this.color = '#00ccff';
+                        break;
+                }
+            }
+            
+            update() {
+                this.y -= this.speed;
+                this.x += this.angleOffset * this.speed;
+                if (this.y < 0 || this.x < 0 || this.x > canvas.width) {
+                    this.active = false;
+                }
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                if (this.type === 'laser') {
+                    // 激光效果
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 10;
+                    ctx.fillRect(this.x - 2, this.y - 10, 4, 20);
+                    ctx.shadowBlur = 0;
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            checkCollision(tile) {
+                const dx = this.x - (tile.x + tile.size/2);
+                const dy = this.y - (tile.y + tile.size/2);
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                return distance < this.radius + tile.size/2;
+            }
+        }
+        
+        // 瓦片类
+        class Tile {
+            constructor(x, y, health) {
+                this.x = x;
+                this.y = y;
+                this.size = 50;
+                this.health = health;
+                this.maxHealth = health;
+                this.active = true;
+                this.depth = 0; // 用于堆叠效果
+            }
+            
+            update() {
+                // 瓦片向下移动
+                this.y += gameSpeed * 0.3;
+                
+                // 不需要检查底部碰撞，由玩家类处理
+            }
+            
+            draw() {
+                if (!this.active) return;
+                
+                // 根据深度调整颜色（堆叠效果）
+                const depthAlpha = Math.max(0.3, 1 - this.depth * 0.1);
+                const shadowOffset = this.depth * 2;
+                
+                // 绘制阴影（堆叠效果）
+                if (this.depth > 0) {
+                    ctx.fillStyle = `rgba(70, 130, 180, ${depthAlpha * 0.3})`;
+                    this.drawOctagon(this.x + this.size/2 + shadowOffset, this.y + this.size/2 + shadowOffset, this.size/2);
+                }
+                
+                // 绘制八边形瓦片
+                ctx.fillStyle = `rgba(135, 206, 235, ${depthAlpha})`;
+                ctx.strokeStyle = `rgba(70, 130, 180, ${depthAlpha})`;
+                ctx.lineWidth = 2;
+                
+                this.drawOctagon(this.x + this.size/2, this.y + this.size/2, this.size/2);
+                
+                // 根据生命值调整数字颜色
+                const healthRatio = this.health / this.maxHealth;
+                if (healthRatio > 0.7) {
+                    ctx.fillStyle = '#000';
+                } else if (healthRatio > 0.3) {
+                    ctx.fillStyle = '#ff6600';
+                } else {
+                    ctx.fillStyle = '#ff0000';
+                }
+                
+                ctx.font = 'bold 16px Microsoft YaHei';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.health.toString(), this.x + this.size/2, this.y + this.size/2);
+            }
+            
+            drawOctagon(centerX, centerY, radius) {
+                ctx.beginPath();
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i * Math.PI * 2) / 8;
+                    const x = centerX + Math.cos(angle) * radius;
+                    const y = centerY + Math.sin(angle) * radius;
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+            
+            takeDamage() {
+                this.health--;
+                if (this.health <= 0) {
+                    this.active = false;
+                    score++;
+                    document.getElementById('score').textContent = score;
+                    
+                    // 每摧毁10个瓦片升级
+                    if (score % 10 === 0) {
+                        level++;
+                        gameSpeed += 0.1;
+                        tileSpawnDelay = Math.max(30, tileSpawnDelay - 5); // 更频繁生成
+                        updateLevelDisplay();
+                    }
+                    
+                    // 随机掉落道具（多样化）
+                    const dropChance = Math.min(0.25, 0.08 + level * 0.02);
+                    if (Math.random() < dropChance) {
+                        const itemTypes = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'shield', 'boomerang'];
+                        const randomItem = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+                        itemDrops.push(new ItemDrop(this.x + this.size/2, this.y + this.size/2, randomItem));
+                    }
+                    return true;
+                }
+                return false;
+            }
+        }
+        
+        // 道具掉落类
+        class ItemDrop {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.size = 30;
+                this.speed = 2;
+                this.active = true;
+                this.animationFrame = 0;
+            }
+            
+            update() {
+                this.y += this.speed;
+                this.animationFrame++;
+                
+                if (this.y > canvas.height) {
+                    this.active = false;
+                }
+                
+                // 检查与玩家的碰撞
+                if (this.x < player.x + player.width &&
+                    this.x + this.size > player.x &&
+                    this.y < player.y + player.height &&
+                    this.y + this.size > player.y) {
+                    player.pickupItem(this.type);
+                    this.active = false;
+                }
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.size/2, this.y + this.size/2);
+                ctx.rotate(this.animationFrame * 0.1);
+                
+                // 根据道具类型设置颜色和文字
+                const itemConfig = {
+                    'uzi': { color: '#ff6600', text: '冲锋枪', textColor: '#fff' },
+                    'shotgun': { color: '#8B4513', text: '霰弹枪', textColor: '#fff' },
+                    'laser': { color: '#ff0066', text: '激光炮', textColor: '#fff' },
+                    'spread': { color: '#00ccff', text: '散射枪', textColor: '#000' },
+                    'bomb': { color: '#ff0000', text: '炸弹', textColor: '#fff' },
+                    'shield': { color: '#00ffff', text: '护盾', textColor: '#000' },
+                    'boomerang': { color: '#ffff00', text: '回旋镖', textColor: '#000' }
+                };
+                
+                const config = itemConfig[this.type] || itemConfig['uzi'];
+                
+                ctx.fillStyle = config.color;
+                ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+                
+                ctx.fillStyle = config.textColor;
+                ctx.font = '10px Microsoft YaHei';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(config.text, 0, 0);
+                
+                ctx.restore();
+            }
+        }
+        
+        // 回旋镖类
+        class Boomerang {
+            constructor(x, y) {
+                this.startX = x;
+                this.x = x;
+                this.y = y;
+                this.speed = 8;
+                this.maxDistance = 200;
+                this.distance = 0;
+                this.returning = false;
+                this.active = true;
+                this.angle = 0;
+            }
+            
+            update() {
+                this.angle += 0.3;
+                
+                if (!this.returning) {
+                    this.y -= this.speed;
+                    this.distance += this.speed;
+                    if (this.distance >= this.maxDistance || this.y <= 0) {
+                        this.returning = true;
+                    }
+                } else {
+                    const dx = this.startX - this.x;
+                    const dy = player.y - this.y;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < 20) {
+                        this.active = false;
+                        return;
+                    }
+                    
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                }
+                
+                // 检查与瓦片碰撞
+                tiles.forEach(tile => {
+                    if (!tile.active) return;
+                    
+                    const dx = this.x - (tile.x + tile.size/2);
+                    const dy = this.y - (tile.y + tile.size/2);
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < 15 + tile.size/2) {
+                        tile.takeDamage();
+                    }
+                });
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+                
+                ctx.fillStyle = '#ffff00';
+                ctx.strokeStyle = '#ff6600';
+                ctx.lineWidth = 2;
+                
+                // 绘制回旋镖形状
+                ctx.beginPath();
+                ctx.moveTo(-15, -5);
+                ctx.lineTo(0, 0);
+                ctx.lineTo(-5, 15);
+                ctx.lineTo(5, 15);
+                ctx.lineTo(15, 5);
+                ctx.lineTo(15, -5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                
+                ctx.restore();
+            }
+        }
+        
+        // 游戏对象
+        let player = new Player();
+        let bullets = [];
+        let tiles = [];
+        let itemDrops = [];
+        let boomerangs = [];
+        
+        // 创建新的瓦片行
+        function createNewTileRow() {
+            const tilesPerRow = Math.min(14, 8 + Math.floor(level / 3)); // 随等级增加瓦片数量
+            const startX = (canvas.width - tilesPerRow * 55) / 2;
+            
+            for (let col = 0; col < tilesPerRow; col++) {
+                const x = startX + col * 55;
+                const y = nextRowY; // 使用连续的Y位置
+                
+                // 难度递增：生命值范围扩大
+                const minHealth = Math.min(level, 5);
+                const maxHealth = Math.min(level * 2 + 8, 25);
+                const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
+                
+                const newTile = new Tile(x, y, health);
+                
+                // 检查是否与现有瓦片重叠（堆叠效果）
+                let depth = 0;
+                tiles.forEach(tile => {
+                    if (tile.active && 
+                        Math.abs(tile.x - x) < 45 && 
+                        Math.abs(tile.y - y) < 50) {
+                        depth = Math.max(depth, tile.depth + 1);
+                    }
+                });
+                newTile.depth = depth;
+                
+                tiles.push(newTile);
+            }
+            
+            nextRowY -= 55; // 下一行位置向上偏移
+        }
+        
+        // 更新等级显示
+        function updateLevelDisplay() {
+            const levelInfo = document.getElementById('level');
+            if (levelInfo) {
+                levelInfo.textContent = level;
+            }
+        }
+        
+        // 键盘输入处理
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (gameState === 'menu' || gameState === 'gameOver') {
+                    startGame();
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+        
+        // 处理玩家移动
+        function handleInput() {
+            if (keys['ArrowLeft']) {
+                player.moveLeft();
+            }
+            if (keys['ArrowRight']) {
+                player.moveRight();
+            }
+        }
+        
+        // 碰撞检测
+        function checkCollisions() {
+            bullets.forEach(bullet => {
+                if (!bullet.active) return;
+                
+                tiles.forEach(tile => {
+                    if (!tile.active) return;
+                    
+                    if (bullet.checkCollision(tile)) {
+                        bullet.active = false;
+                        tile.takeDamage();
+                    }
+                });
+            });
+        }
+        
+        // 更新游戏
+        function update() {
+            if (gameState !== 'playing') return;
+            
+            handleInput();
+            
+            player.update();
+            
+            bullets.forEach(bullet => bullet.update());
+            bullets = bullets.filter(bullet => bullet.active);
+            
+            tiles.forEach(tile => tile.update());
+            tiles = tiles.filter(tile => tile.active);
+            
+            itemDrops.forEach(item => item.update());
+            itemDrops = itemDrops.filter(item => item.active);
+            
+            boomerangs.forEach(boomerang => boomerang.update());
+            boomerangs = boomerangs.filter(boomerang => boomerang.active);
+            
+            checkCollisions();
+            
+            // 连续生成新的瓦片行
+            tileSpawnTimer++;
+            if (tileSpawnTimer >= tileSpawnDelay) {
+                createNewTileRow();
+                tileSpawnTimer = 0;
+            }
+            
+            // 清理超出屏幕下方的瓦片
+            tiles = tiles.filter(tile => tile.y < canvas.height + 100);
+        }
+        
+        // 绘制游戏
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (gameState === 'menu') {
+                drawMenu();
+            } else if (gameState === 'playing') {
+                player.draw();
+                bullets.forEach(bullet => bullet.draw());
+                tiles.forEach(tile => tile.draw());
+                itemDrops.forEach(item => item.draw());
+                boomerangs.forEach(boomerang => boomerang.draw());
+            } else if (gameState === 'gameOver') {
+                drawGameOver();
+            }
+        }
+        
+        // 绘制菜单
+        function drawMenu() {
+            ctx.fillStyle = '#333';
+            ctx.font = '48px Microsoft YaHei';
+            ctx.textAlign = 'center';
+            ctx.fillText('六边形破坏者', canvas.width/2, canvas.height/2 - 50);
+            
+            ctx.font = '24px Microsoft YaHei';
+            ctx.fillText('按空格键开始游戏', canvas.width/2, canvas.height/2 + 20);
+            
+            ctx.font = '16px Microsoft YaHei';
+            ctx.fillText('使用左右箭头键移动，自动射击', canvas.width/2, canvas.height/2 + 60);
+            ctx.fillText('瓦片碰到玩家才会游戏结束', canvas.width/2, canvas.height/2 + 85);
+            ctx.fillText('收集武器和道具强化战斗力', canvas.width/2, canvas.height/2 + 110);
+        }
+        
+        // 绘制游戏结束画面
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#ff0000';
+            ctx.font = '48px Microsoft YaHei';
+            ctx.textAlign = 'center';
+            ctx.fillText('游戏结束', canvas.width/2, canvas.height/2 - 50);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = '24px Microsoft YaHei';
+            ctx.fillText(`最终得分: ${score} | 等级: ${level}`, canvas.width/2, canvas.height/2);
+            ctx.fillText('按空格键重新开始', canvas.width/2, canvas.height/2 + 40);
+        }
+        
+        // 开始游戏
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            level = 1;
+            gameSpeed = 1;
+            tileSpawnTimer = 0;
+            tileSpawnDelay = 60;
+            nextRowY = -60;
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            document.getElementById('weapon').textContent = '默认';
+            
+            player = new Player();
+            bullets = [];
+            tiles = [];
+            itemDrops = [];
+            boomerangs = [];
+            
+            // 初始生成几行瓦片
+            for (let i = 0; i < 4; i++) {
+                createNewTileRow();
+                // 手动调整初始瓦片位置，确保连续
+                const tilesInThisRow = Math.min(14, 8 + Math.floor(level / 3));
+                const latestTiles = tiles.slice(-tilesInThisRow);
+                latestTiles.forEach(tile => {
+                    tile.y = i * 55 + 20;
+                });
+                nextRowY = (i + 1) * 55 + 20;
+            }
+        }
+        
+        // 游戏主循环
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 初始化游戏
+        gameLoop();
+        
+        // 触摸控制（移动设备）
+        let touchStartX = 0;
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            touchStartX = e.touches[0].clientX;
+            if (gameState === 'menu' || gameState === 'gameOver') {
+                startGame();
+            }
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (gameState !== 'playing') return;
+            
+            const touchX = e.touches[0].clientX;
+            const deltaX = touchX - touchStartX;
+            
+            if (deltaX > 10) {
+                player.moveRight();
+            } else if (deltaX < -10) {
+                player.moveLeft();
+            }
+            
+            touchStartX = touchX;
+        });
+    </script>
+</body>
+</html>

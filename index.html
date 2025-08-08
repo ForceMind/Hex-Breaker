@@ -239,6 +239,9 @@
                 this.magneticRange = 0;          // 磁力拾取范围
                 this.bulletSizeBoost = 0;        // 子弹尺寸增加
                 this.weaponDurationBoost = 1.0;  // 武器持续时间倍数
+                
+                // 初始化武器显示
+                this.updateWeaponDisplay();
             }
             
             update() {
@@ -336,24 +339,8 @@
                 ctx.fillRect(this.x, this.y, this.width, this.height);
                 ctx.shadowBlur = 0;
                 
-                // 绘制武器标签 - 移动端字体调整
-                if (this.weapon !== 'default') {
-                    ctx.fillStyle = '#00ff00';
-                    const fontSize = canvas.width < 500 ? '12px' : '14px';
-                    ctx.font = `${fontSize} Microsoft YaHei`;
-                    ctx.textAlign = 'center';
-                    const weaponNames = {
-                        'uzi': '冲锋枪',
-                        'shotgun': '霰弹枪',
-                        'laser': '激光炮',
-                        'spread': '散射枪'
-                    };
-                    const weaponText = `${weaponNames[this.weapon]} Lv${this.weaponLevel}`;
-                    ctx.fillText(weaponText, this.x + this.width/2, this.y - 10);
-                    
-                    // 绘制武器进度条
-                    this.drawWeaponProgressBar();
-                }
+                // 绘制武器进度条（多武器支持）
+                this.drawWeaponProgressBar();
             }
             
             moveLeft() {
@@ -687,19 +674,24 @@
                 
                 if (activeWeapons.length === 0) return;
                 
+                // 右下角位置设置
+                const rightMargin = 20;
+                const bottomMargin = 60; // 从底部开始的距离
+                const barWidth = 80;
+                const barHeight = 8;
+                const barSpacing = 25; // 每个进度条之间的间距
+                
                 // 为每个武器绘制进度条
                 activeWeapons.forEach((weapon, index) => {
-                    const barWidth = 50;
-                    const barHeight = 5;
-                    const barX = this.x + this.width/2 - barWidth/2;
-                    const barY = this.y - 25 - (index * 10); // 多个武器时垂直排列
+                    const barX = canvas.width - rightMargin - barWidth;
+                    const barY = canvas.height - bottomMargin - (index * barSpacing);
                     
                     // 计算进度百分比
                     const progress = weapon.duration / weapon.maxDuration;
                     
                     // 进度条背景
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                    ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(barX - 2, barY - 2, barWidth + 4, barHeight + 4);
                     
                     // 进度条外框
                     ctx.strokeStyle = '#ffffff';
@@ -735,18 +727,36 @@
                         ctx.fillRect(barX, barY, barWidth * progress, barHeight);
                     }
                     
-                    // 显示武器标识
-                    const weaponSymbols = {
-                        'uzi': 'U',
-                        'shotgun': 'S', 
-                        'laser': 'L',
-                        'spread': 'P'
+                    // 显示武器名称和等级
+                    const weaponNames = {
+                        'uzi': '冲锋枪',
+                        'shotgun': '霰弹枪',
+                        'laser': '激光炮',
+                        'spread': '散射枪'
                     };
                     
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = '8px Microsoft YaHei';
-                    ctx.textAlign = 'left';
-                    ctx.fillText(weaponSymbols[weapon.type] + weapon.level, barX - 15, barY + 4);
+                    // 绘制文字阴影
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '12px Microsoft YaHei';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`${weaponNames[weapon.type]} Lv${weapon.level}`, barX - 4, barY + 7);
+                    
+                    // 绘制文字主体
+                    ctx.fillStyle = '#ffff00'; // 黄色文字更醒目
+                    ctx.fillText(`${weaponNames[weapon.type]} Lv${weapon.level}`, barX - 5, barY + 6);
+                    
+                    // 显示剩余时间 - 带阴影
+                    const remainingSeconds = Math.ceil(weapon.duration / 60);
+                    
+                    // 时间文字阴影
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '10px Microsoft YaHei';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`${remainingSeconds}s`, barX + barWidth/2 + 1, barY + 19);
+                    
+                    // 时间文字主体
+                    ctx.fillStyle = '#00ff00'; // 绿色时间文字
+                    ctx.fillText(`${remainingSeconds}s`, barX + barWidth/2, barY + 18);
                 });
             }
             
@@ -2076,10 +2086,11 @@
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;
             document.getElementById('lives').textContent = lives;
-            document.getElementById('weapon').textContent = '默认';
             document.getElementById('pattern').textContent = currentTilePattern;
 
             player = new Player();
+            // 更新武器显示
+            player.updateWeaponDisplay();
             bullets = [];
             tiles = [];
             itemDrops = [];

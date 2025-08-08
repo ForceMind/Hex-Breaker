@@ -14,14 +14,20 @@
             align-items: center;
             min-height: 100vh;
             font-family: 'Microsoft YaHei', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
         
         #gameContainer {
             text-align: center;
             background: white;
-            padding: 20px;
+            padding: 10px;
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            max-width: 100vw;
+            max-height: 100vh;
+            box-sizing: border-box;
         }
         
         #gameCanvas {
@@ -29,18 +35,115 @@
             background: white;
             display: block;
             margin: 0 auto;
+            max-width: 100%;
+            max-height: 70vh;
+            touch-action: none;
         }
         
         #gameInfo {
-            margin-top: 10px;
-            font-size: 18px;
+            margin: 5px 0;
+            font-size: 16px;
             color: #333;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
         }
         
         #controls {
-            margin-top: 10px;
-            font-size: 14px;
+            margin-top: 5px;
+            font-size: 12px;
             color: #666;
+            padding: 0 10px;
+        }
+        
+        /* 移动端控制按钮 */
+        #mobileControls {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            gap: 20px;
+            z-index: 1000;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #333;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+            user-select: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .control-btn:active {
+            transform: scale(0.9);
+            background: rgba(200, 200, 200, 0.9);
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                align-items: flex-start;
+                padding: 10px;
+            }
+            
+            #gameContainer {
+                padding: 5px;
+                width: 100%;
+                height: 100vh;
+                border-radius: 0;
+                display: flex;
+                flex-direction: column;
+            }
+            
+            #gameCanvas {
+                border: 1px solid #333;
+                flex: 1;
+                width: 100%;
+                height: auto;
+            }
+            
+            #gameInfo {
+                font-size: 14px;
+                margin: 3px 0;
+            }
+            
+            #controls {
+                font-size: 10px;
+                margin: 3px 0;
+            }
+            
+            #mobileControls {
+                display: flex;
+            }
+            
+            h1 {
+                font-size: 20px;
+                margin: 5px 0;
+            }
+        }
+        
+        @media (max-height: 600px) {
+            #gameContainer {
+                padding: 2px;
+            }
+            
+            h1 {
+                font-size: 16px;
+                margin: 2px 0;
+            }
+            
+            #gameInfo {
+                font-size: 12px;
+            }
         }
     </style>
 </head>
@@ -53,7 +156,14 @@
             <div>武器: <span id="weapon">默认</span></div>
         </div>
         <div id="controls">
-            使用左右箭头键移动 | 空格键开始游戏
+            PC: 使用左右箭头键移动 | 空格键开始游戏<br>
+            手机: 触摸屏幕移动 | 点击屏幕开始游戏
+        </div>
+        
+        <!-- 移动端控制按钮 -->
+        <div id="mobileControls">
+            <div class="control-btn" id="leftBtn">←</div>
+            <div class="control-btn" id="rightBtn">→</div>
         </div>
     </div>
 
@@ -61,6 +171,32 @@
         // 游戏画布和上下文
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        
+        // 动态调整画布大小
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const maxWidth = Math.min(800, window.innerWidth - 40);
+            const maxHeight = Math.min(600, window.innerHeight * 0.7);
+            
+            if (window.innerWidth <= 768) {
+                // 移动端适配
+                canvas.width = Math.min(400, window.innerWidth - 20);
+                canvas.height = Math.min(600, window.innerHeight - 150);
+            } else {
+                // 桌面端
+                canvas.width = maxWidth;
+                canvas.height = maxHeight;
+            }
+        }
+        
+        // 初始化画布大小
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // 帧率控制 - 解决高刷新率问题
+        let lastTime = 0;
+        const targetFPS = 60;
+        const frameInterval = 1000 / targetFPS;
         
         // 游戏状态
         let gameState = 'menu'; // 'menu', 'playing', 'gameOver'
@@ -133,10 +269,11 @@
                 ctx.fillRect(this.x, this.y, this.width, this.height);
                 ctx.shadowBlur = 0;
                 
-                // 绘制武器标签
+                // 绘制武器标签 - 移动端字体调整
                 if (this.weapon !== 'default') {
                     ctx.fillStyle = '#00ff00';
-                    ctx.font = '14px Microsoft YaHei';
+                    const fontSize = canvas.width < 500 ? '12px' : '14px';
+                    ctx.font = `${fontSize} Microsoft YaHei`;
                     ctx.textAlign = 'center';
                     const weaponNames = {
                         'uzi': '冲锋枪',
@@ -351,7 +488,7 @@
                 
                 this.drawOctagon(this.x + this.size/2, this.y + this.size/2, this.size/2);
                 
-                // 根据生命值调整数字颜色
+                // 绘制中文数字 - 移动端字体调整
                 const healthRatio = this.health / this.maxHealth;
                 if (healthRatio > 0.7) {
                     ctx.fillStyle = '#000';
@@ -361,7 +498,8 @@
                     ctx.fillStyle = '#ff0000';
                 }
                 
-                ctx.font = 'bold 16px Microsoft YaHei';
+                const fontSize = canvas.width < 500 ? '14px' : '16px';
+                ctx.font = `bold ${fontSize} Microsoft YaHei`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(this.health.toString(), this.x + this.size/2, this.y + this.size/2);
@@ -464,7 +602,8 @@
                 ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
                 
                 ctx.fillStyle = config.textColor;
-                ctx.font = '10px Microsoft YaHei';
+                const fontSize = canvas.width < 500 ? '8px' : '10px';
+                ctx.font = `${fontSize} Microsoft YaHei`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(config.text, 0, 0);
@@ -613,12 +752,55 @@
             keys[e.code] = false;
         });
         
+        // 移动端按钮控制
+        let mobileLeftPressed = false;
+        let mobileRightPressed = false;
+        
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        
+        // 左按钮事件
+        leftBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            mobileLeftPressed = true;
+        });
+        leftBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            mobileLeftPressed = false;
+        });
+        leftBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            mobileLeftPressed = true;
+        });
+        leftBtn.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            mobileLeftPressed = false;
+        });
+        
+        // 右按钮事件
+        rightBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            mobileRightPressed = true;
+        });
+        rightBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            mobileRightPressed = false;
+        });
+        rightBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            mobileRightPressed = true;
+        });
+        rightBtn.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            mobileRightPressed = false;
+        });
+        
         // 处理玩家移动
         function handleInput() {
-            if (keys['ArrowLeft']) {
+            if (keys['ArrowLeft'] || mobileLeftPressed) {
                 player.moveLeft();
             }
-            if (keys['ArrowRight']) {
+            if (keys['ArrowRight'] || mobileRightPressed) {
                 player.moveRight();
             }
         }
@@ -692,17 +874,19 @@
         // 绘制菜单
         function drawMenu() {
             ctx.fillStyle = '#333';
-            ctx.font = '48px Microsoft YaHei';
+            const titleSize = canvas.width < 500 ? '32px' : '48px';
+            ctx.font = `${titleSize} Microsoft YaHei`;
             ctx.textAlign = 'center';
             ctx.fillText('六边形破坏者', canvas.width/2, canvas.height/2 - 50);
             
-            ctx.font = '24px Microsoft YaHei';
-            ctx.fillText('按空格键开始游戏', canvas.width/2, canvas.height/2 + 20);
+            const subtitleSize = canvas.width < 500 ? '18px' : '24px';
+            ctx.font = `${subtitleSize} Microsoft YaHei`;
+            ctx.fillText('点击屏幕或按空格键开始', canvas.width/2, canvas.height/2 + 20);
             
-            ctx.font = '16px Microsoft YaHei';
-            ctx.fillText('使用左右箭头键移动，自动射击', canvas.width/2, canvas.height/2 + 60);
-            ctx.fillText('瓦片碰到玩家才会游戏结束', canvas.width/2, canvas.height/2 + 85);
-            ctx.fillText('收集武器和道具强化战斗力', canvas.width/2, canvas.height/2 + 110);
+            const infoSize = canvas.width < 500 ? '12px' : '16px';
+            ctx.font = `${infoSize} Microsoft YaHei`;
+            ctx.fillText('瓦片碰到玩家才会游戏结束', canvas.width/2, canvas.height/2 + 60);
+            ctx.fillText('收集武器和道具强化战斗力', canvas.width/2, canvas.height/2 + 85);
         }
         
         // 绘制游戏结束画面
@@ -711,14 +895,16 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             ctx.fillStyle = '#ff0000';
-            ctx.font = '48px Microsoft YaHei';
+            const titleSize = canvas.width < 500 ? '32px' : '48px';
+            ctx.font = `${titleSize} Microsoft YaHei`;
             ctx.textAlign = 'center';
             ctx.fillText('游戏结束', canvas.width/2, canvas.height/2 - 50);
             
             ctx.fillStyle = '#fff';
-            ctx.font = '24px Microsoft YaHei';
+            const scoreSize = canvas.width < 500 ? '18px' : '24px';
+            ctx.font = `${scoreSize} Microsoft YaHei`;
             ctx.fillText(`最终得分: ${score} | 等级: ${level}`, canvas.width/2, canvas.height/2);
-            ctx.fillText('按空格键重新开始', canvas.width/2, canvas.height/2 + 40);
+            ctx.fillText('点击屏幕或按空格键重新开始', canvas.width/2, canvas.height/2 + 40);
         }
         
         // 开始游戏
@@ -753,21 +939,32 @@
             }
         }
         
-        // 游戏主循环
-        function gameLoop() {
-            update();
-            draw();
+        // 游戏主循环 - 帧率控制
+        function gameLoop(currentTime) {
+            if (currentTime - lastTime >= frameInterval) {
+                update();
+                draw();
+                lastTime = currentTime;
+            }
             requestAnimationFrame(gameLoop);
         }
         
         // 初始化游戏
-        gameLoop();
+        gameLoop(0);
         
-        // 触摸控制（移动设备）
+        // 触摸控制（移动设备）- 优化版
         let touchStartX = 0;
+        let touchStartY = 0;
+        let lastTouchX = 0;
+        
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            touchStartX = e.touches[0].clientX;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            touchStartX = touch.clientX - rect.left;
+            touchStartY = touch.clientY - rect.top;
+            lastTouchX = touchStartX;
+            
             if (gameState === 'menu' || gameState === 'gameOver') {
                 startGame();
             }
@@ -777,16 +974,27 @@
             e.preventDefault();
             if (gameState !== 'playing') return;
             
-            const touchX = e.touches[0].clientX;
-            const deltaX = touchX - touchStartX;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const currentTouchX = touch.clientX - rect.left;
+            const deltaX = currentTouchX - lastTouchX;
             
-            if (deltaX > 10) {
-                player.moveRight();
-            } else if (deltaX < -10) {
-                player.moveLeft();
+            // 根据滑动方向移动玩家
+            if (Math.abs(deltaX) > 2) { // 增加灵敏度阈值
+                if (deltaX > 0) {
+                    player.moveRight();
+                } else {
+                    player.moveLeft();
+                }
+                lastTouchX = currentTouchX;
             }
-            
-            touchStartX = touchX;
+        });
+        
+        // 鼠标点击支持
+        canvas.addEventListener('click', (e) => {
+            if (gameState === 'menu' || gameState === 'gameOver') {
+                startGame();
+            }
         });
     </script>
 </body>

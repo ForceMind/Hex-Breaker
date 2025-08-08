@@ -375,7 +375,19 @@
                         document.getElementById('weapon').textContent = `${weaponNames[itemType]} Lv${this.weaponLevel}`;
                         break;
                     case 'bomb':
-                        this.useBomb();
+                        this.useBomb('normal');
+                        break;
+                    case 'bigbomb':
+                        this.useBomb('big');
+                        break;
+                    case 'diagonalbomb':
+                        this.useBomb('diagonal');
+                        break;
+                    case 'horizontalbomb':
+                        this.useBomb('horizontal');
+                        break;
+                    case 'linebomb':
+                        this.useBomb('line');
                         break;
                     case 'shield':
                         this.shield = true;
@@ -387,9 +399,9 @@
                 }
             }
             
-            useBomb() {
-                // 发射炸弹到前方
-                bombs.push(new Bomb(this.x + this.width/2, this.y));
+            useBomb(bombType = 'normal') {
+                // 发射指定类型的炸弹
+                bombs.push(new Bomb(this.x + this.width/2, this.y, bombType));
             }
             
             throwBoomerang() {
@@ -553,7 +565,7 @@
                     // 随机掉落道具（多样化）
                     const dropChance = Math.min(0.25, 0.08 + level * 0.02);
                     if (Math.random() < dropChance) {
-                        const itemTypes = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'shield', 'boomerang'];
+                        const itemTypes = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'bigbomb', 'diagonalbomb', 'horizontalbomb', 'linebomb', 'shield', 'boomerang'];
                         const randomItem = itemTypes[Math.floor(Math.random() * itemTypes.length)];
                         itemDrops.push(new ItemDrop(this.x + this.size/2, this.y + this.size/2, randomItem));
                     }
@@ -605,6 +617,10 @@
                     'laser': { color: '#ff0066', text: '激光炮', textColor: '#fff' },
                     'spread': { color: '#00ccff', text: '散射枪', textColor: '#000' },
                     'bomb': { color: '#ff0000', text: '炸弹', textColor: '#fff' },
+                    'bigbomb': { color: '#ff8800', text: '大炸弹', textColor: '#fff' },
+                    'diagonalbomb': { color: '#ff00ff', text: '斜炸弹', textColor: '#fff' },
+                    'horizontalbomb': { color: '#00ffff', text: '横炸弹', textColor: '#000' },
+                    'linebomb': { color: '#ff4488', text: '线炸弹', textColor: '#fff' },
                     'shield': { color: '#00ffff', text: '护盾', textColor: '#000' },
                     'boomerang': { color: '#ffff00', text: '回旋镖', textColor: '#000' }
                 };
@@ -626,22 +642,75 @@
         }
         
         // 炸弹类
+        // 炸弹类 - 支持多种类型
         class Bomb {
-            constructor(x, y) {
+            constructor(x, y, type = 'normal') {
                 this.x = x;
                 this.y = y;
+                this.startX = x;
+                this.startY = y;
                 this.radius = 8;
-                this.speed = 6;
                 this.active = true;
                 this.exploded = false;
                 this.explosionRadius = 0;
-                this.maxExplosionRadius = 80;
                 this.explosionTimer = 0;
+                this.type = type;
+                
+                // 根据炸弹类型设置属性
+                this.setupBombType();
+            }
+            
+            setupBombType() {
+                switch(this.type) {
+                    case 'normal':
+                        this.speed = 6;
+                        this.maxExplosionRadius = 80;
+                        this.directionX = 0;
+                        this.directionY = -1;
+                        this.color = '#ff4444';
+                        this.name = '普通炸弹';
+                        break;
+                    case 'big':
+                        this.speed = 5;
+                        this.maxExplosionRadius = 120; // 更大爆炸范围
+                        this.directionX = 0;
+                        this.directionY = -1;
+                        this.color = '#ff8800';
+                        this.radius = 12;
+                        this.name = '大型炸弹';
+                        break;
+                    case 'diagonal':
+                        this.speed = 7;
+                        this.maxExplosionRadius = 70;
+                        this.directionX = Math.random() > 0.5 ? 0.7 : -0.7; // 随机左斜或右斜
+                        this.directionY = -0.7;
+                        this.color = '#ff00ff';
+                        this.name = '斜射炸弹';
+                        break;
+                    case 'horizontal':
+                        this.speed = 6;
+                        this.maxExplosionRadius = 60;
+                        this.directionX = Math.random() > 0.5 ? 1 : -1; // 随机左右
+                        this.directionY = 0;
+                        this.color = '#00ffff';
+                        this.name = '横向炸弹';
+                        break;
+                    case 'line':
+                        this.speed = 8;
+                        this.maxExplosionRadius = 40;
+                        this.directionX = 0;
+                        this.directionY = -1;
+                        this.color = '#ff4488';
+                        this.isLineBomb = true; // 标记为线性爆炸
+                        this.name = '线性炸弹';
+                        break;
+                }
             }
             
             update() {
                 if (!this.exploded) {
-                    this.y -= this.speed;
+                    this.x += this.directionX * this.speed;
+                    this.y += this.directionY * this.speed;
                     
                     // 检查与瓦片碰撞
                     tiles.forEach(tile => {
@@ -657,7 +726,7 @@
                     });
                     
                     // 炸弹飞出屏幕
-                    if (this.y < -50) {
+                    if (this.x < -50 || this.x > canvas.width + 50 || this.y < -50 || this.y > canvas.height + 50) {
                         this.active = false;
                     }
                 } else {
@@ -675,19 +744,48 @@
                 this.exploded = true;
                 this.explosionTimer = 0;
                 
-                // 爆炸范围内的瓦片受到伤害
+                // 根据炸弹类型进行不同的爆炸伤害计算
                 tiles.forEach(tile => {
                     if (!tile.active) return;
                     
-                    const dx = this.x - (tile.x + tile.size/2);
-                    const dy = this.y - (tile.y + tile.size/2);
-                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    let shouldDamage = false;
+                    let distance = 0;
                     
-                    if (distance <= this.maxExplosionRadius) {
-                        // 根据距离计算伤害 - 提升炸弹威力
-                        const damageRatio = 1 - (distance / this.maxExplosionRadius);
-                        const damage = Math.max(2, Math.floor(6 * damageRatio)); // 提升炸弹威力：2-6伤害
+                    if (this.isLineBomb) {
+                        // 线性炸弹：只影响垂直线上的瓦片
+                        const horizontalDistance = Math.abs(tile.x + tile.size/2 - this.x);
+                        const verticalDistance = Math.abs(tile.y + tile.size/2 - this.y);
                         
+                        if (horizontalDistance <= 30 && verticalDistance <= this.maxExplosionRadius) {
+                            shouldDamage = true;
+                            distance = verticalDistance;
+                        }
+                    } else {
+                        // 圆形爆炸
+                        const dx = this.x - (tile.x + tile.size/2);
+                        const dy = this.y - (tile.y + tile.size/2);
+                        distance = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if (distance <= this.maxExplosionRadius) {
+                            shouldDamage = true;
+                        }
+                    }
+                    
+                    if (shouldDamage) {
+                        // 根据距离和炸弹类型计算伤害
+                        const damageRatio = 1 - (distance / this.maxExplosionRadius);
+                        let baseDamage = 4;
+                        
+                        switch(this.type) {
+                            case 'big':
+                                baseDamage = 8; // 大型炸弹威力更大
+                                break;
+                            case 'line':
+                                baseDamage = 6; // 线性炸弹中等威力但范围精确
+                                break;
+                        }
+                        
+                        const damage = Math.max(2, Math.floor(baseDamage * damageRatio));
                         tile.takeDamage(damage);
                     }
                 });
@@ -696,8 +794,8 @@
             draw() {
                 if (!this.exploded) {
                     // 绘制飞行中的炸弹
-                    ctx.fillStyle = '#ff4444';
-                    ctx.strokeStyle = '#cc0000';
+                    ctx.fillStyle = this.color;
+                    ctx.strokeStyle = this.color === '#ff4444' ? '#cc0000' : '#000000';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
                     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -711,27 +809,54 @@
                         ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
                         ctx.fill();
                     }
+                    
+                    // 为特殊炸弹添加标识
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '10px Microsoft YaHei';
+                    ctx.textAlign = 'center';
+                    let symbol = '';
+                    switch(this.type) {
+                        case 'big': symbol = '大'; break;
+                        case 'diagonal': symbol = '斜'; break;
+                        case 'horizontal': symbol = '横'; break;
+                        case 'line': symbol = '线'; break;
+                    }
+                    if (symbol) {
+                        ctx.fillText(symbol, this.x, this.y + 3);
+                    }
                 } else {
                     // 绘制爆炸效果
                     const alpha = 1 - (this.explosionTimer / 20);
-                    ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.6})`;
-                    ctx.strokeStyle = `rgba(255, 200, 0, ${alpha})`;
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.explosionRadius, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
                     
-                    // 爆炸火花
-                    for (let i = 0; i < 8; i++) {
-                        const angle = (i / 8) * Math.PI * 2;
-                        const sparkX = this.x + Math.cos(angle) * this.explosionRadius * 0.8;
-                        const sparkY = this.y + Math.sin(angle) * this.explosionRadius * 0.8;
+                    if (this.isLineBomb) {
+                        // 线性爆炸效果 - 垂直条状
+                        ctx.fillStyle = `rgba(255, 100, 255, ${alpha * 0.6})`;
+                        ctx.fillRect(this.x - 30, this.y - this.explosionRadius, 60, this.explosionRadius * 2);
                         
-                        ctx.fillStyle = `rgba(255, 255, 0, ${alpha})`;
+                        ctx.strokeStyle = `rgba(255, 200, 255, ${alpha})`;
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(this.x - 30, this.y - this.explosionRadius, 60, this.explosionRadius * 2);
+                    } else {
+                        // 圆形爆炸效果
+                        ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.6})`;
+                        ctx.strokeStyle = `rgba(255, 200, 0, ${alpha})`;
+                        ctx.lineWidth = 3;
                         ctx.beginPath();
-                        ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
+                        ctx.arc(this.x, this.y, this.explosionRadius, 0, Math.PI * 2);
                         ctx.fill();
+                        ctx.stroke();
+                        
+                        // 爆炸火花
+                        for (let i = 0; i < 8; i++) {
+                            const angle = (i / 8) * Math.PI * 2;
+                            const sparkX = this.x + Math.cos(angle) * this.explosionRadius * 0.8;
+                            const sparkY = this.y + Math.sin(angle) * this.explosionRadius * 0.8;
+                            
+                            ctx.fillStyle = `rgba(255, 255, 0, ${alpha})`;
+                            ctx.beginPath();
+                            ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
                     }
                 }
             }

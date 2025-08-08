@@ -158,6 +158,9 @@
             <div id="upgrades" style="font-size: 12px; color: #666; margin-top: 5px;">
                 永久增益: <span id="upgradeList">无</span>
             </div>
+            <div id="difficulty" style="font-size: 11px; color: #888; margin-top: 3px;">
+                战力: <span id="playerPower">1.0</span> | 难度: <span id="difficultyLevel">简单</span>
+            </div>
         </div>
         <div id="controls">
             PC: 使用左右箭头键移动 | 空格键开始游戏<br>
@@ -269,6 +272,9 @@
                 // 更新武器显示
                 this.updateWeaponDisplay();
                 
+                // 更新难度显示
+                this.updateDifficultyDisplay();
+                
                 // 更新护盾状态
                 if (this.shieldDuration > 0) {
                     this.shieldDuration--;
@@ -323,6 +329,25 @@
                 
                 const weaponText = activeWeapons.length > 0 ? activeWeapons.join(', ') : '默认';
                 document.getElementById('weapon').textContent = weaponText;
+            }
+            
+            updateDifficultyDisplay() {
+                const power = calculatePlayerPower();
+                document.getElementById('playerPower').textContent = power.toFixed(1);
+                
+                // 计算难度等级
+                let difficultyText = '简单';
+                if (power >= 15) {
+                    difficultyText = '地狱';
+                } else if (power >= 12) {
+                    difficultyText = '困难';
+                } else if (power >= 8) {
+                    difficultyText = '中等';
+                } else if (power >= 5) {
+                    difficultyText = '稍难';
+                }
+                
+                document.getElementById('difficultyLevel').textContent = difficultyText;
             }
             
             draw() {
@@ -914,8 +939,13 @@
             }
             
             update() {
-                // 瓦片向下移动
-                this.y += gameSpeed * 0.3;
+                // 计算动态游戏速度
+                const baseSpeed = gameSpeed * 0.3;
+                const playerPower = calculatePlayerPower();
+                const speedMultiplier = Math.min(1.5, 1 + (playerPower - 1) / 15); // 最大1.5倍速度
+                
+                // 瓦片向下移动（速度随玩家实力增加）
+                this.y += baseSpeed * speedMultiplier;
                 
                 // 根据当前生命值更新厚度
                 this.thickness = Math.min(this.health, 8);
@@ -1636,39 +1666,97 @@
         }
         
         function createFullTileRowAtPosition(tilesPerRow, startX, tileSpacing, tileSize, yPosition) {
-            for (let col = 0; col < tilesPerRow; col++) {
-                const x = startX + col * tileSpacing - tileSize/2;
+            // 计算玩家的当前战斗力
+            const playerPower = calculatePlayerPower();
+            
+            // 基于玩家战斗力和等级调整瓦片密度
+            const densityMultiplier = calculateTileDensity(playerPower);
+            const actualTilesPerRow = Math.floor(tilesPerRow * densityMultiplier);
+            
+            // 居中调整起始位置
+            const adjustedStartX = (canvas.width - (actualTilesPerRow - 1) * tileSpacing) / 2;
+            
+            for (let col = 0; col < actualTilesPerRow; col++) {
+                const x = adjustedStartX + col * tileSpacing - tileSize/2;
                 const y = yPosition;
                 
-                // 根据等级调整数字范围：难度递增
-                let minHealth, maxHealth;
-                if (level <= 2) {
-                    minHealth = 1;
-                    maxHealth = 3;
-                } else if (level <= 4) {
-                    minHealth = 1;
-                    maxHealth = 5;
-                } else if (level <= 6) {
-                    minHealth = 2;
-                    maxHealth = 7;
-                } else if (level <= 8) {
-                    minHealth = 3;
-                    maxHealth = 9;
-                } else if (level <= 10) {
-                    minHealth = 4;
-                    maxHealth = 12;
-                } else if (level <= 15) {
-                    minHealth = 5;
-                    maxHealth = 15;
-                } else {
-                    minHealth = Math.floor(level / 2);
-                    maxHealth = Math.min(25, level + 10);
-                }
+                // 基于玩家战斗力和等级调整瓦片血量
+                const healthRange = calculateTileHealthRange(playerPower);
+                const health = Math.floor(Math.random() * (healthRange.max - healthRange.min + 1)) + healthRange.min;
                 
-                const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
                 const newTile = new Tile(x, y, health);
                 tiles.push(newTile);
             }
+        }
+        
+        // 计算玩家当前战斗力
+        function calculatePlayerPower() {
+            let power = 1; // 基础战斗力
+            
+            // 武器战斗力
+            Object.keys(player.weapons).forEach(weaponType => {
+                if (player.weapons[weaponType].active) {
+                    const weapon = player.weapons[weaponType];
+                    switch(weaponType) {
+                        case 'uzi':
+                            power += weapon.level * 1.2; // 冲锋枪：高射速
+                            break;
+                        case 'shotgun':
+                            power += weapon.level * 1.5; // 霰弹枪：高威力
+                            break;
+                        case 'laser':
+                            power += weapon.level * 1.8; // 激光炮：最高威力
+                            break;
+                        case 'spread':
+                            power += weapon.level * 1.3; // 散射枪：覆盖面广
+                            break;
+                    }
+                }
+            });
+            
+            // 永久增益战斗力
+            if (player.doubleBullets) power += 2;
+            if (player.rapidFire) power += 1.5;
+            if (player.piercingBullets) power += 1.3;
+            if (player.bulletSizeBoost > 0) power += player.bulletSizeBoost * 0.3;
+            if (player.speedBoost > 0) power += player.speedBoost * 0.2;
+            
+            // 多武器同时激活的协同效果
+            const activeWeapons = Object.keys(player.weapons).filter(w => player.weapons[w].active && w !== 'default').length;
+            if (activeWeapons > 1) {
+                power += activeWeapons * 0.5; // 多武器协同加成
+            }
+            
+            return Math.max(1, power);
+        }
+        
+        // 根据玩家战斗力计算瓦片密度
+        function calculateTileDensity(playerPower) {
+            const baseDensity = 0.7; // 基础密度70%
+            const powerEffect = Math.min(playerPower / 10, 0.3); // 战斗力影响，最大30%
+            const levelEffect = Math.min(level / 20, 0.2); // 等级影响，最大20%
+            
+            const density = baseDensity + powerEffect + levelEffect;
+            return Math.min(1.0, density); // 最大100%密度
+        }
+        
+        // 根据玩家战斗力计算瓦片血量范围
+        function calculateTileHealthRange(playerPower) {
+            // 基础血量随等级增长
+            const baseMin = Math.max(1, Math.floor(level / 3));
+            const baseMax = Math.max(3, level + 2);
+            
+            // 根据玩家战斗力调整血量
+            const powerMultiplier = Math.max(0.8, playerPower / 8);
+            
+            const minHealth = Math.floor(baseMin * powerMultiplier);
+            const maxHealth = Math.floor(baseMax * powerMultiplier);
+            
+            // 确保血量在合理范围内
+            return {
+                min: Math.max(1, minHealth),
+                max: Math.min(50, Math.max(minHealth + 1, maxHealth))
+            };
         }
         
         // 形状模式瓦片生成
@@ -1721,20 +1809,11 @@
                     const x = startX + col * tileSpacing - tileSize/2;
                     const y = yPosition;
                     
-                    // 根据等级调整数字范围
-                    let minHealth, maxHealth;
-                    if (level <= 10) {
-                        minHealth = 3;
-                        maxHealth = 9;
-                    } else if (level <= 15) {
-                        minHealth = 5;
-                        maxHealth = 15;
-                    } else {
-                        minHealth = Math.floor(level / 2);
-                        maxHealth = Math.min(25, level + 10);
-                    }
+                    // 使用统一的动态难度系统
+                    const playerPower = calculatePlayerPower();
+                    const healthRange = calculateTileHealthRange(playerPower);
+                    const health = Math.floor(Math.random() * (healthRange.max - healthRange.min + 1)) + healthRange.min;
                     
-                    const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
                     const newTile = new Tile(x, y, health);
                     tiles.push(newTile);
                 }

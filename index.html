@@ -231,7 +231,7 @@
                 this.speedBoost = 0;             // 速度增加
                 this.rapidFire = false;          // 快速射击
                 this.piercingBullets = false;    // 穿透子弹
-                this.extraLife = 0;              // 额外生命
+                this.shieldBooster = false;      // 护盾增强器
                 this.magneticRange = 0;          // 磁力拾取范围
                 this.bulletSizeBoost = 0;        // 子弹尺寸增加
                 this.weaponDurationBoost = 1.0;  // 武器持续时间倍数
@@ -293,6 +293,9 @@
                     ctx.beginPath();
                     ctx.arc(this.x + this.width/2, this.y + this.height/2, 30, 0, Math.PI * 2);
                     ctx.stroke();
+                    
+                    // 绘制护盾进度条
+                    this.drawShieldProgressBar();
                 }
                 
                 // 绘制玩家（黄色方块带光晕）
@@ -399,8 +402,6 @@
             }
             
             checkTileCollision() {
-                if (this.shield) return; // 护盾保护
-                
                 tiles.forEach(tile => {
                     if (!tile.active) return;
                     
@@ -408,7 +409,17 @@
                         this.x + this.width > tile.x &&
                         this.y < tile.y + tile.size &&
                         this.y + this.height > tile.y) {
-                        gameState = 'gameOver';
+                        
+                        if (this.shield) {
+                            // 护盾激活时，护盾和瓦片一起消失
+                            this.shield = false;
+                            this.shieldDuration = 0;
+                            tile.active = false;
+                            this.showUpgradeMessage('护盾抵挡了攻击！');
+                        } else {
+                            // 没有护盾时游戏结束
+                            gameState = 'gameOver';
+                        }
                     }
                 });
             }
@@ -484,11 +495,11 @@
                         this.showUpgradeMessage('穿透子弹激活！');
                         this.updateUpgradeDisplay();
                         break;
-                    case 'extralife':
-                        this.extraLife += 1;
-                        lives += 1;
-                        this.showUpgradeMessage('额外生命+1！');
-                        document.getElementById('lives').textContent = lives;
+                    case 'shieldbooster':
+                        this.shieldBooster = true;
+                        this.shield = true;
+                        this.shieldDuration = 600; // 10秒强化护盾
+                        this.showUpgradeMessage('强化护盾激活！');
                         this.updateUpgradeDisplay();
                         break;
                     case 'magnet':
@@ -558,7 +569,7 @@
                 if (this.speedBoost > 0) upgrades.push(`加速+${this.speedBoost}`);
                 if (this.rapidFire) upgrades.push('连射');
                 if (this.piercingBullets) upgrades.push('穿透');
-                if (this.extraLife > 0) upgrades.push(`额外生命+${this.extraLife}`);
+                if (this.shieldBooster) upgrades.push('强化护盾');
                 if (this.magneticRange > 0) upgrades.push(`磁力${Math.floor(this.magneticRange/50)}`);
                 if (this.bulletSizeBoost > 0) upgrades.push(`大弹+${this.bulletSizeBoost}`);
                 if (this.weaponDurationBoost > 1.0) upgrades.push(`持久+${Math.floor((this.weaponDurationBoost-1)*100)}%`);
@@ -638,6 +649,55 @@
                 ctx.font = '10px Microsoft YaHei';
                 ctx.textAlign = 'center';
                 ctx.fillText(`${remainingSeconds}s`, barX + barWidth/2, barY - 2);
+            }
+            
+            drawShieldProgressBar() {
+                if (this.shieldDuration <= 0) return;
+                
+                // 护盾进度条位置和尺寸
+                const barWidth = 50;
+                const barHeight = 5;
+                const barX = this.x + this.width/2 - barWidth/2;
+                const barY = this.y + this.height + 35; // 位于玩家下方
+                
+                // 计算护盾剩余时间比例
+                const maxShieldDuration = this.shieldBooster ? 600 : 300; // 强化护盾10秒，普通护盾5秒
+                const progress = this.shieldDuration / maxShieldDuration;
+                
+                // 进度条背景
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+                
+                // 进度条外框
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(barX, barY, barWidth, barHeight);
+                
+                // 护盾进度条填充 - 青色渐变
+                let fillColor;
+                if (progress > 0.6) {
+                    fillColor = '#00ffff'; // 青色：护盾强度高
+                } else if (progress > 0.3) {
+                    fillColor = '#00cccc'; // 深青色：护盾一般
+                } else {
+                    fillColor = '#0088aa'; // 更深：护盾弱
+                }
+                
+                ctx.fillStyle = fillColor;
+                ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+                
+                // 添加闪烁效果当护盾即将消失时
+                if (progress < 0.2 && Math.floor(Date.now() / 150) % 2) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+                }
+                
+                // 显示护盾剩余时间（秒）
+                const remainingSeconds = Math.ceil(this.shieldDuration / 60);
+                ctx.fillStyle = '#00ffff';
+                ctx.font = '9px Microsoft YaHei';
+                ctx.textAlign = 'center';
+                ctx.fillText(`护盾 ${remainingSeconds}s`, barX + barWidth/2, barY - 2);
             }
         }
         
@@ -807,7 +867,7 @@
                         // 分层掉落系统
                         const commonItems = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'bigbomb', 'shield', 'boomerang'];
                         const rareItems = ['diagonalbomb', 'horizontalbomb', 'linebomb'];
-                        const upgradeItems = ['doublebullets', 'speedboost', 'rapidfire', 'piercing', 'extralife', 'magnet', 'bigbullets', 'weaponduration'];
+                        const upgradeItems = ['doublebullets', 'speedboost', 'rapidfire', 'piercing', 'shieldbooster', 'magnet', 'bigbullets', 'weaponduration'];
                         
                         let randomItem;
                         const rand = Math.random();
@@ -881,7 +941,7 @@
                     'speedboost': { color: '#00ff88', text: '加速', textColor: '#000' },
                     'rapidfire': { color: '#ff4400', text: '连射', textColor: '#fff' },
                     'piercing': { color: '#8866ff', text: '穿透', textColor: '#fff' },
-                    'extralife': { color: '#ff69b4', text: '生命', textColor: '#fff' },
+                    'shieldbooster': { color: '#ff69b4', text: '护盾+', textColor: '#fff' },
                     'magnet': { color: '#4169e1', text: '磁力', textColor: '#fff' },
                     'bigbullets': { color: '#32cd32', text: '大弹', textColor: '#000' },
                     'weaponduration': { color: '#ffa500', text: '持久', textColor: '#000' }

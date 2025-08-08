@@ -220,13 +220,13 @@
                 this.y = canvas.height - this.height - 20;
                 this.speed = 5;
                 this.weapons = {
-                    'default': { active: true, level: 1, duration: 0, maxDuration: 0 },
-                    'uzi': { active: false, level: 1, duration: 0, maxDuration: 0 },
-                    'shotgun': { active: false, level: 1, duration: 0, maxDuration: 0 },
-                    'laser': { active: false, level: 1, duration: 0, maxDuration: 0 },
-                    'spread': { active: false, level: 1, duration: 0, maxDuration: 0 }
+                    'default': { active: true, level: 1, duration: 0, maxDuration: 0, cooldown: 0 },
+                    'uzi': { active: false, level: 1, duration: 0, maxDuration: 0, cooldown: 0 },
+                    'shotgun': { active: false, level: 1, duration: 0, maxDuration: 0, cooldown: 0 },
+                    'laser': { active: false, level: 1, duration: 0, maxDuration: 0, cooldown: 0 },
+                    'spread': { active: false, level: 1, duration: 0, maxDuration: 0, cooldown: 0 }
                 };
-                this.weaponCooldown = 0;
+                this.weaponCooldown = 0; // 保留作为全局最小间隔
                 this.shield = false;
                 this.shieldDuration = 0;
                 
@@ -247,6 +247,7 @@
             update() {
                 // 更新所有武器状态
                 Object.keys(this.weapons).forEach(weaponType => {
+                    // 更新武器持续时间
                     if (this.weapons[weaponType].duration > 0) {
                         this.weapons[weaponType].duration--;
                         if (this.weapons[weaponType].duration <= 0) {
@@ -254,6 +255,11 @@
                             this.weapons[weaponType].level = 1;
                             this.weapons[weaponType].maxDuration = 0;
                         }
+                    }
+                    
+                    // 更新武器独立冷却时间
+                    if (this.weapons[weaponType].cooldown > 0) {
+                        this.weapons[weaponType].cooldown--;
                     }
                 });
                 
@@ -271,7 +277,7 @@
                     }
                 }
                 
-                // 武器冷却
+                // 全局武器冷却（作为最小间隔）
                 if (this.weaponCooldown > 0) {
                     this.weaponCooldown--;
                 }
@@ -353,6 +359,7 @@
             }
             
             shoot() {
+                // 全局最小间隔检查（防止射击过于频繁）
                 if (this.weaponCooldown > 0) return;
                 
                 const centerX = this.x + this.width/2;
@@ -361,11 +368,12 @@
                 // 计算快速射击的冷却时间减少
                 const cooldownMultiplier = this.rapidFire ? 0.5 : 1.0;
                 let shotsFired = false;
-                let maxCooldown = 0;
+                let minGlobalCooldown = 3; // 全局最小间隔
                 
                 // 遍历所有激活的武器
                 Object.keys(this.weapons).forEach(weaponType => {
                     if (!this.weapons[weaponType].active) return;
+                    if (this.weapons[weaponType].cooldown > 0) return; // 该武器还在冷却中
                     
                     const weapon = this.weapons[weaponType];
                     let weaponCooldown = 0;
@@ -377,12 +385,12 @@
                                 bullets.push(new Bullet(centerX - 8, centerY, 'normal'));
                                 bullets.push(new Bullet(centerX + 8, centerY, 'normal'));
                             }
-                            weaponCooldown = Math.floor(20 * cooldownMultiplier);
+                            weaponCooldown = Math.floor(20 * cooldownMultiplier); // 中等射速
                             break;
                             
                         case 'uzi':
-                            // 冲锋枪：等级越高射速越快，高等级有多发子弹
-                            const uziBullets = weapon.level >= 3 ? 2 : 1; // 3级以上双发
+                            // 冲锋枪：最高射速
+                            const uziBullets = weapon.level >= 3 ? 2 : 1;
                             for (let b = 0; b < uziBullets; b++) {
                                 bullets.push(new Bullet(centerX + (b - 0.5) * 8, centerY - b * 5, 'normal'));
                             }
@@ -392,13 +400,13 @@
                                     bullets.push(new Bullet(centerX + 6 + (b - 0.5) * 8, centerY - b * 5, 'normal'));
                                 }
                             }
-                            weaponCooldown = Math.floor(Math.max(4, 16 - weapon.level * 2) * cooldownMultiplier);
+                            weaponCooldown = Math.floor(Math.max(3, 8 - weapon.level) * cooldownMultiplier); // 很快的射速
                             break;
                             
                         case 'shotgun':
-                            // 霰弹枪：等级越高散弹越多，高等级有更大威力
+                            // 霰弹枪：较慢射速，但威力大
                             const shotgunSpread = Math.min(2 + weapon.level, 7);
-                            const shotgunDamage = weapon.level >= 4 ? 'big' : 'normal'; // 4级以上大子弹
+                            const shotgunDamage = weapon.level >= 4 ? 'big' : 'normal';
                             for (let i = -(shotgunSpread-1)/2; i <= (shotgunSpread-1)/2; i++) {
                                 bullets.push(new Bullet(centerX + i * 12, centerY, shotgunDamage, i * 0.4));
                             }
@@ -407,13 +415,13 @@
                                     bullets.push(new Bullet(centerX + i * 12, centerY - 8, shotgunDamage, i * 0.4));
                                 }
                             }
-                            weaponCooldown = Math.floor(Math.max(20, 35 - weapon.level * 2) * cooldownMultiplier);
+                            weaponCooldown = Math.floor(Math.max(25, 40 - weapon.level * 2) * cooldownMultiplier); // 较慢射速
                             break;
                             
                         case 'laser':
-                            // 激光炮：等级越高威力越大，高等级有穿透效果
+                            // 激光炮：最慢射速，但威力最大
                             const laserType = weapon.level >= 3 ? 'big' : 'laser';
-                            const laserCount = weapon.level >= 5 ? 3 : 1; // 5级三发激光
+                            const laserCount = weapon.level >= 5 ? 3 : 1;
                             for (let l = 0; l < laserCount; l++) {
                                 bullets.push(new Bullet(centerX + (l - 1) * 15, centerY - l * 3, laserType));
                             }
@@ -423,14 +431,14 @@
                                     bullets.push(new Bullet(centerX + 10 + (l - 1) * 15, centerY - l * 3, laserType));
                                 }
                             }
-                            weaponCooldown = Math.floor(Math.max(6, 20 - weapon.level * 2) * cooldownMultiplier);
+                            weaponCooldown = Math.floor(Math.max(35, 50 - weapon.level * 3) * cooldownMultiplier); // 最慢射速
                             break;
                             
                         case 'spread':
-                            // 散射枪：等级越高子弹越多，高等级子弹更快更大
+                            // 散射枪：中等射速
                             const spreadCount = Math.min(3 + weapon.level, 9);
-                            const spreadType = weapon.level >= 4 ? 'normal' : 'small'; // 4级以上普通子弹
-                            const spreadAngle = weapon.level >= 3 ? 0.4 : 0.3; // 3级以上扩散更大
+                            const spreadType = weapon.level >= 4 ? 'normal' : 'small';
+                            const spreadAngle = weapon.level >= 3 ? 0.4 : 0.3;
                             for (let i = -(spreadCount-1)/2; i <= (spreadCount-1)/2; i++) {
                                 bullets.push(new Bullet(centerX, centerY, spreadType, i * spreadAngle));
                             }
@@ -439,18 +447,18 @@
                                     bullets.push(new Bullet(centerX, centerY - 6, spreadType, i * spreadAngle));
                                 }
                             }
-                            weaponCooldown = Math.floor(Math.max(15, 30 - weapon.level * 2) * cooldownMultiplier);
+                            weaponCooldown = Math.floor(Math.max(12, 25 - weapon.level * 2) * cooldownMultiplier); // 中等射速
                             break;
                     }
                     
                     if (weaponCooldown > 0) {
                         shotsFired = true;
-                        maxCooldown = Math.max(maxCooldown, weaponCooldown);
+                        this.weapons[weaponType].cooldown = weaponCooldown; // 设置该武器的冷却时间
                     }
                 });
                 
                 if (shotsFired) {
-                    this.weaponCooldown = maxCooldown;
+                    this.weaponCooldown = minGlobalCooldown; // 设置全局最小间隔
                 }
             }
             
@@ -507,7 +515,8 @@
                                 active: true,
                                 level: 1,
                                 duration: baseDuration,
-                                maxDuration: baseDuration
+                                maxDuration: baseDuration,
+                                cooldown: 0
                             };
                         }
                         this.updateWeaponDisplay();

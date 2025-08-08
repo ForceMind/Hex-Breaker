@@ -723,29 +723,49 @@
                 }
             }
         }
+        // 回旋镖类
         class Boomerang {
             constructor(x, y) {
                 this.startX = x;
+                this.startY = y;
                 this.x = x;
                 this.y = y;
-                this.speed = 8;
-                this.maxDistance = 200;
-                this.distance = 0;
-                this.returning = false;
+                this.speed = 6;
                 this.active = true;
                 this.angle = 0;
+                this.radius = 15;
+                this.time = 0; // 用于计算弧线轨迹
+                this.maxTime = 120; // 总飞行时间（2秒）
             }
             
             update() {
-                this.angle += 0.3;
+                this.angle += 0.4; // 回旋镖旋转
+                this.time++;
                 
-                if (!this.returning) {
-                    this.y -= this.speed;
-                    this.distance += this.speed;
-                    if (this.distance >= this.maxDistance || this.y <= 0) {
-                        this.returning = true;
+                if (this.time <= this.maxTime) {
+                    // 计算弧线轨迹
+                    const progress = this.time / this.maxTime;
+                    
+                    // 使用抛物线方程创建弧线轨迹
+                    const arcHeight = 150; // 弧线最高点
+                    const arcWidth = 200;  // 弧线最远点
+                    
+                    // X轴：先向左移动，然后返回
+                    if (progress < 0.5) {
+                        // 前半段：向左移动
+                        this.x = this.startX - (progress * 2) * arcWidth;
+                    } else {
+                        // 后半段：返回
+                        const returnProgress = (progress - 0.5) * 2;
+                        this.x = this.startX - arcWidth + returnProgress * arcWidth;
                     }
+                    
+                    // Y轴：抛物线轨迹
+                    const yOffset = -4 * arcHeight * progress * (1 - progress);
+                    this.y = this.startY + yOffset;
+                    
                 } else {
+                    // 超时后回到玩家位置
                     const dx = this.startX - this.x;
                     const dy = player.y - this.y;
                     const distance = Math.sqrt(dx*dx + dy*dy);
@@ -755,8 +775,8 @@
                         return;
                     }
                     
-                    this.x += (dx / distance) * this.speed;
-                    this.y += (dy / distance) * this.speed;
+                    this.x += (dx / distance) * this.speed * 1.5;
+                    this.y += (dy / distance) * this.speed * 1.5;
                 }
                 
                 // 检查与瓦片碰撞
@@ -771,6 +791,11 @@
                         tile.takeDamage(2); // 回旋镖造成2点伤害
                     }
                 });
+                
+                // 如果回旋镖飞出屏幕太远，强制返回
+                if (this.x < -100 || this.x > canvas.width + 100 || this.y < -100) {
+                    this.time = this.maxTime + 1;
+                }
             }
             
             draw() {
@@ -778,18 +803,56 @@
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.angle);
                 
+                // 绘制回旋镖轨迹（可选）
+                if (this.time < this.maxTime) {
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    
+                    // 绘制预期轨迹的一小段
+                    for (let i = 0; i < 20; i++) {
+                        const futureTime = this.time + i;
+                        if (futureTime > this.maxTime) break;
+                        
+                        const futureProgress = futureTime / this.maxTime;
+                        let futureX, futureY;
+                        
+                        if (futureProgress < 0.5) {
+                            futureX = this.startX - (futureProgress * 2) * 200;
+                        } else {
+                            const returnProgress = (futureProgress - 0.5) * 2;
+                            futureX = this.startX - 200 + returnProgress * 200;
+                        }
+                        
+                        const yOffset = -4 * 150 * futureProgress * (1 - futureProgress);
+                        futureY = this.startY + yOffset;
+                        
+                        if (i === 0) {
+                            ctx.moveTo(futureX - this.x, futureY - this.y);
+                        } else {
+                            ctx.lineTo(futureX - this.x, futureY - this.y);
+                        }
+                    }
+                    ctx.stroke();
+                }
+                
+                // 绘制回旋镖本体
                 ctx.fillStyle = '#ffff00';
                 ctx.strokeStyle = '#ff6600';
                 ctx.lineWidth = 2;
                 
-                // 绘制回旋镖形状
+                // 绘制回旋镖形状（更真实的V形）
                 ctx.beginPath();
-                ctx.moveTo(-15, -5);
-                ctx.lineTo(0, 0);
-                ctx.lineTo(-5, 15);
-                ctx.lineTo(5, 15);
-                ctx.lineTo(15, 5);
-                ctx.lineTo(15, -5);
+                ctx.moveTo(-15, -3);
+                ctx.lineTo(-5, 0);
+                ctx.lineTo(0, -8);
+                ctx.lineTo(8, 0);
+                ctx.lineTo(15, -3);
+                ctx.lineTo(12, 0);
+                ctx.lineTo(8, 8);
+                ctx.lineTo(0, 5);
+                ctx.lineTo(-8, 8);
+                ctx.lineTo(-12, 0);
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
@@ -970,6 +1033,25 @@
             if (tileSpawnTimer >= tileSpawnDelay) {
                 createNewTileRow();
                 tileSpawnTimer = 0;
+                
+                // 调整新生成瓦片的Y位置，确保连续
+                const tileSize = 50;
+                const tileSpacing = 55;
+                const tilesPerRow = Math.floor(canvas.width / tileSpacing);
+                const latestTiles = tiles.slice(-tilesPerRow);
+                
+                // 计算应该的Y位置（基于现有最高瓦片）
+                let topMostY = canvas.height;
+                tiles.forEach(tile => {
+                    if (tile.active && tile.y < topMostY) {
+                        topMostY = tile.y;
+                    }
+                });
+                
+                // 将新瓦片放在最高瓦片上方
+                latestTiles.forEach(tile => {
+                    tile.y = topMostY - 60;
+                });
             }
             
             // 清理超出屏幕下方的瓦片
@@ -1036,7 +1118,7 @@
             score = 0;
             level = 1;
             gameSpeed = 1;
-            tileSpawnTimer = 60; // 延迟第一次生成，避免与初始瓦片重叠
+            tileSpawnTimer = 0; // 立即开始生成，避免空行
             tileSpawnDelay = 90;
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;

@@ -204,8 +204,7 @@
         let score = 0;
         let gameSpeed = 1;
         let level = 1;
-        let tileSpawnTimer = 0;
-        let tileSpawnDelay = 90; // 1.5秒生成一行（60fps）
+        // 不再需要瓦片生成计时器，改为基于位置检测
         
         // 玩家类
         class Player {
@@ -464,6 +463,7 @@
                 this.size = 50;
                 this.health = health;
                 this.maxHealth = health;
+                this.originalHealth = health; // 保存原始血量用于唯一标识
                 this.active = true;
                 // 根据生命值决定厚度层数
                 this.thickness = Math.min(health, 8); // 最多8层厚度
@@ -546,9 +546,7 @@
                     // 每摧毁8个瓦片升级
                     if (score % 8 === 0) {
                         level++;
-                        gameSpeed += 0.1;
-                        // 根据等级调整生成频率和速度
-                        tileSpawnDelay = Math.max(30, 90 - level * 3); // 更频繁生成，最快每0.5秒
+                        gameSpeed += 0.1; // 增加游戏整体速度
                         updateLevelDisplay();
                     }
                     
@@ -751,6 +749,7 @@
                 this.radius = 15;
                 this.time = 0; // 用于计算弧线轨迹
                 this.maxTime = 120; // 总飞行时间（2秒）
+                this.hitTiles = new Set(); // 记录已经击中的瓦片，防止重复伤害
             }
             
             update() {
@@ -794,7 +793,7 @@
                     this.y += (dy / distance) * this.speed * 1.5;
                 }
                 
-                // 检查与瓦片碰撞
+                // 检查与瓦片碰撞 - 回旋镖可以穿透瓦片
                 tiles.forEach(tile => {
                     if (!tile.active) return;
                     
@@ -802,8 +801,15 @@
                     const dy = this.y - (tile.y + tile.size/2);
                     const distance = Math.sqrt(dx*dx + dy*dy);
                     
+                    // 回旋镖与瓦片碰撞时造成伤害但不停止飞行
                     if (distance < this.radius + tile.size/2) {
-                        tile.takeDamage(2); // 回旋镖造成2点伤害
+                        // 使用瓦片的唯一标识来防止重复伤害
+                        const tileId = `${tile.x}_${tile.y}_${tile.originalHealth || tile.health}`;
+                        if (!this.hitTiles.has(tileId)) {
+                            this.hitTiles.add(tileId);
+                            tile.takeDamage(2); // 回旋镖造成2点伤害
+                        }
+                        // 注意：这里没有停止回旋镖的飞行，它会继续按轨迹飞行
                     }
                 });
                 
@@ -1052,30 +1058,61 @@
             
             checkCollisions();
             
-            // 定时生成新的瓦片行
-            tileSpawnTimer++;
-            if (tileSpawnTimer >= tileSpawnDelay) {
-                createNewTileRow();
-                tileSpawnTimer = 0;
-                
-                // 调整新生成瓦片的Y位置，确保连续无空隙
+            // 基于位置生成新的瓦片行 - 确保连续无空白
+            let topMostY = canvas.height;
+            let hasActiveTiles = false;
+            tiles.forEach(tile => {
+                if (tile.active) {
+                    hasActiveTiles = true;
+                    if (tile.y < topMostY) {
+                        topMostY = tile.y;
+                    }
+                }
+            });
+            
+            // 当最顶部的瓦片Y坐标大于0时（还在屏幕内但已经开始下移），立即生成新瓦片
+            if (!hasActiveTiles || topMostY > 0) {
                 const tileSize = 50;
                 const tileSpacing = 55;
                 const tilesPerRow = Math.floor(canvas.width / tileSpacing);
-                const latestTiles = tiles.slice(-tilesPerRow);
+                const startX = (canvas.width - (tilesPerRow - 1) * tileSpacing) / 2;
                 
-                // 找到最上方的瓦片Y位置
-                let topMostY = canvas.height;
-                tiles.forEach(tile => {
-                    if (tile.active && tile.y < topMostY) {
-                        topMostY = tile.y;
+                // 计算新瓦片的Y位置：紧贴最顶部瓦片上方
+                const newY = !hasActiveTiles ? 10 : topMostY - 55;
+                
+                // 直接在正确位置创建新瓦片
+                for (let col = 0; col < tilesPerRow; col++) {
+                    const x = startX + col * tileSpacing - tileSize/2;
+                    
+                    // 根据等级调整数字范围：难度递增
+                    let minHealth, maxHealth;
+                    if (level <= 2) {
+                        minHealth = 1;
+                        maxHealth = 3;
+                    } else if (level <= 4) {
+                        minHealth = 1;
+                        maxHealth = 5;
+                    } else if (level <= 6) {
+                        minHealth = 2;
+                        maxHealth = 7;
+                    } else if (level <= 8) {
+                        minHealth = 3;
+                        maxHealth = 9;
+                    } else if (level <= 10) {
+                        minHealth = 4;
+                        maxHealth = 12;
+                    } else if (level <= 15) {
+                        minHealth = 5;
+                        maxHealth = 15;
+                    } else {
+                        minHealth = Math.floor(level / 2);
+                        maxHealth = Math.min(25, level + 10);
                     }
-                });
-                
-                // 将新瓦片紧贴在最高瓦片上方（55像素间距，确保紧密连接）
-                latestTiles.forEach(tile => {
-                    tile.y = topMostY - 55;
-                });
+                    
+                    const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
+                    const newTile = new Tile(x, newY, health);
+                    tiles.push(newTile);
+                }
             }
             
             // 清理超出屏幕下方的瓦片
@@ -1142,8 +1179,7 @@
             score = 0;
             level = 1;
             gameSpeed = 1;
-            tileSpawnTimer = 89; // 设为89，这样第二帧就会生成新瓦片
-            tileSpawnDelay = 90; // 1.5秒生成间隔（60fps）
+            // 不再需要瓦片生成计时器，改为基于位置检测
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;
             document.getElementById('weapon').textContent = '默认';

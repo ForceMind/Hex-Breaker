@@ -219,11 +219,14 @@
                 this.x = canvas.width / 2 - this.width / 2;
                 this.y = canvas.height - this.height - 20;
                 this.speed = 5;
-                this.weapon = 'default';
+                this.weapons = {
+                    'default': { active: true, level: 1, duration: 0, maxDuration: 0 },
+                    'uzi': { active: false, level: 1, duration: 0, maxDuration: 0 },
+                    'shotgun': { active: false, level: 1, duration: 0, maxDuration: 0 },
+                    'laser': { active: false, level: 1, duration: 0, maxDuration: 0 },
+                    'spread': { active: false, level: 1, duration: 0, maxDuration: 0 }
+                };
                 this.weaponCooldown = 0;
-                this.weaponDuration = 0;
-                this.maxWeaponDuration = 0; // 武器最大持续时间，用于进度条
-                this.weaponLevel = 1; // 武器等级
                 this.shield = false;
                 this.shieldDuration = 0;
                 
@@ -239,16 +242,23 @@
             }
             
             update() {
-                // 更新武器状态
-                if (this.weaponDuration > 0) {
-                    this.weaponDuration--;
-                    if (this.weaponDuration <= 0) {
-                        this.weapon = 'default';
-                        this.weaponLevel = 1;
-                        this.maxWeaponDuration = 0;
-                        document.getElementById('weapon').textContent = '默认';
+                // 更新所有武器状态
+                Object.keys(this.weapons).forEach(weaponType => {
+                    if (this.weapons[weaponType].duration > 0) {
+                        this.weapons[weaponType].duration--;
+                        if (this.weapons[weaponType].duration <= 0) {
+                            this.weapons[weaponType].active = false;
+                            this.weapons[weaponType].level = 1;
+                            this.weapons[weaponType].maxDuration = 0;
+                        }
                     }
-                }
+                });
+                
+                // 确保默认武器始终激活
+                this.weapons.default.active = true;
+                
+                // 更新武器显示
+                this.updateWeaponDisplay();
                 
                 // 更新护盾状态
                 if (this.shieldDuration > 0) {
@@ -284,6 +294,26 @@
                 
                 // 检查与瓦片碰撞
                 this.checkTileCollision();
+            }
+            
+            updateWeaponDisplay() {
+                const activeWeapons = [];
+                const weaponNames = {
+                    'default': '默认',
+                    'uzi': '冲锋枪',
+                    'shotgun': '霰弹枪',
+                    'laser': '激光炮',
+                    'spread': '散射枪'
+                };
+                
+                Object.keys(this.weapons).forEach(weaponType => {
+                    if (this.weapons[weaponType].active && weaponType !== 'default') {
+                        activeWeapons.push(`${weaponNames[weaponType]}Lv${this.weapons[weaponType].level}`);
+                    }
+                });
+                
+                const weaponText = activeWeapons.length > 0 ? activeWeapons.join(', ') : '默认';
+                document.getElementById('weapon').textContent = weaponText;
             }
             
             draw() {
@@ -346,59 +376,79 @@
                 
                 // 计算快速射击的冷却时间减少
                 const cooldownMultiplier = this.rapidFire ? 0.5 : 1.0;
+                let shotsFired = false;
+                let maxCooldown = 0;
                 
-                switch(this.weapon) {
-                    case 'default':
-                        bullets.push(new Bullet(centerX, centerY, 'normal'));
-                        // 双子弹增益
-                        if (this.doubleBullets) {
-                            bullets.push(new Bullet(centerX - 8, centerY, 'normal'));
-                            bullets.push(new Bullet(centerX + 8, centerY, 'normal'));
-                        }
-                        this.weaponCooldown = Math.floor(20 * cooldownMultiplier);
-                        break;
-                    case 'uzi':
-                        bullets.push(new Bullet(centerX, centerY, 'normal'));
-                        if (this.doubleBullets) {
-                            bullets.push(new Bullet(centerX - 6, centerY, 'normal'));
-                            bullets.push(new Bullet(centerX + 6, centerY, 'normal'));
-                        }
-                        this.weaponCooldown = Math.floor(Math.max(4, 12 - this.weaponLevel * 2) * cooldownMultiplier);
-                        break;
-                    case 'shotgun':
-                        const shotgunSpread = Math.min(2 + this.weaponLevel, 5); // 等级越高散弹越多
-                        for (let i = -(shotgunSpread-1)/2; i <= (shotgunSpread-1)/2; i++) {
-                            bullets.push(new Bullet(centerX + i * 15, centerY, 'normal', i * 0.5));
-                        }
-                        // 双子弹增益（额外一排散弹）
-                        if (this.doubleBullets) {
+                // 遍历所有激活的武器
+                Object.keys(this.weapons).forEach(weaponType => {
+                    if (!this.weapons[weaponType].active) return;
+                    
+                    const weapon = this.weapons[weaponType];
+                    let weaponCooldown = 0;
+                    
+                    switch(weaponType) {
+                        case 'default':
+                            bullets.push(new Bullet(centerX, centerY, 'normal'));
+                            if (this.doubleBullets) {
+                                bullets.push(new Bullet(centerX - 8, centerY, 'normal'));
+                                bullets.push(new Bullet(centerX + 8, centerY, 'normal'));
+                            }
+                            weaponCooldown = Math.floor(20 * cooldownMultiplier);
+                            break;
+                            
+                        case 'uzi':
+                            bullets.push(new Bullet(centerX, centerY, 'normal'));
+                            if (this.doubleBullets) {
+                                bullets.push(new Bullet(centerX - 6, centerY, 'normal'));
+                                bullets.push(new Bullet(centerX + 6, centerY, 'normal'));
+                            }
+                            weaponCooldown = Math.floor(Math.max(4, 12 - weapon.level * 2) * cooldownMultiplier);
+                            break;
+                            
+                        case 'shotgun':
+                            const shotgunSpread = Math.min(2 + weapon.level, 5);
                             for (let i = -(shotgunSpread-1)/2; i <= (shotgunSpread-1)/2; i++) {
-                                bullets.push(new Bullet(centerX + i * 15, centerY - 10, 'normal', i * 0.5));
+                                bullets.push(new Bullet(centerX + i * 15, centerY, 'normal', i * 0.5));
                             }
-                        }
-                        this.weaponCooldown = Math.floor(30 * cooldownMultiplier);
-                        break;
-                    case 'laser':
-                        bullets.push(new Bullet(centerX, centerY, 'laser'));
-                        if (this.doubleBullets) {
-                            bullets.push(new Bullet(centerX - 10, centerY, 'laser'));
-                            bullets.push(new Bullet(centerX + 10, centerY, 'laser'));
-                        }
-                        this.weaponCooldown = Math.floor(Math.max(8, 18 - this.weaponLevel * 2) * cooldownMultiplier);
-                        break;
-                    case 'spread':
-                        const spreadCount = Math.min(3 + this.weaponLevel, 7); // 等级越高子弹越多
-                        for (let i = -(spreadCount-1)/2; i <= (spreadCount-1)/2; i++) {
-                            bullets.push(new Bullet(centerX, centerY, 'small', i * 0.3));
-                        }
-                        // 双子弹增益（额外一排散射）
-                        if (this.doubleBullets) {
+                            if (this.doubleBullets) {
+                                for (let i = -(shotgunSpread-1)/2; i <= (shotgunSpread-1)/2; i++) {
+                                    bullets.push(new Bullet(centerX + i * 15, centerY - 10, 'normal', i * 0.5));
+                                }
+                            }
+                            weaponCooldown = Math.floor(30 * cooldownMultiplier);
+                            break;
+                            
+                        case 'laser':
+                            bullets.push(new Bullet(centerX, centerY, 'laser'));
+                            if (this.doubleBullets) {
+                                bullets.push(new Bullet(centerX - 10, centerY, 'laser'));
+                                bullets.push(new Bullet(centerX + 10, centerY, 'laser'));
+                            }
+                            weaponCooldown = Math.floor(Math.max(8, 18 - weapon.level * 2) * cooldownMultiplier);
+                            break;
+                            
+                        case 'spread':
+                            const spreadCount = Math.min(3 + weapon.level, 7);
                             for (let i = -(spreadCount-1)/2; i <= (spreadCount-1)/2; i++) {
-                                bullets.push(new Bullet(centerX, centerY - 8, 'small', i * 0.3));
+                                bullets.push(new Bullet(centerX, centerY, 'small', i * 0.3));
                             }
-                        }
-                        this.weaponCooldown = Math.floor(25 * cooldownMultiplier);
-                        break;
+                            if (this.doubleBullets) {
+                                for (let i = -(spreadCount-1)/2; i <= (spreadCount-1)/2; i++) {
+                                    bullets.push(new Bullet(centerX, centerY - 8, 'small', i * 0.3));
+                                }
+                            }
+                            weaponCooldown = Math.floor(25 * cooldownMultiplier);
+                            break;
+                    }
+                    
+                    if (weaponCooldown > 0) {
+                        shotsFired = true;
+                        maxCooldown = Math.max(maxCooldown, weaponCooldown);
+                    }
+                });
+                
+                if (shotsFired) {
+                    this.weaponCooldown = maxCooldown;
                 }
             }
             
@@ -442,27 +492,23 @@
                     case 'shotgun':
                     case 'laser':
                     case 'spread':
-                        if (this.weapon === itemType) {
+                        if (this.weapons[itemType].active) {
                             // 相同武器升级
-                            this.weaponLevel = Math.min(this.weaponLevel + 1, 5); // 最高5级
+                            this.weapons[itemType].level = Math.min(this.weapons[itemType].level + 1, 5); // 最高5级
                             const bonusTime = this.calculateWeaponDuration(itemType) * 0.5; // 升级奖励50%时间
-                            this.weaponDuration += bonusTime;
-                            this.maxWeaponDuration += bonusTime;
+                            this.weapons[itemType].duration += bonusTime;
+                            this.weapons[itemType].maxDuration += bonusTime;
                         } else {
-                            // 不同武器替换
-                            this.weapon = itemType;
-                            this.weaponLevel = 1;
+                            // 激活新武器
                             const baseDuration = this.calculateWeaponDuration(itemType);
-                            this.weaponDuration = baseDuration;
-                            this.maxWeaponDuration = baseDuration;
+                            this.weapons[itemType] = {
+                                active: true,
+                                level: 1,
+                                duration: baseDuration,
+                                maxDuration: baseDuration
+                            };
                         }
-                        const weaponNames = {
-                            'uzi': '冲锋枪',
-                            'shotgun': '霰弹枪',
-                            'laser': '激光炮',
-                            'spread': '散射枪'
-                        };
-                        document.getElementById('weapon').textContent = `${weaponNames[itemType]} Lv${this.weaponLevel}`;
+                        this.updateWeaponDisplay();
                         break;
                     case 'bomb':
                         this.useBomb('normal');
@@ -520,9 +566,13 @@
                         this.updateUpgradeDisplay();
                         break;
                     case 'bigbullets':
-                        this.bulletSizeBoost += 2;
-                        this.showUpgradeMessage('子弹尺寸增加！');
-                        this.updateUpgradeDisplay();
+                        if (this.bulletSizeBoost < 8) { // 设置子弹尺寸上限为8
+                            this.bulletSizeBoost += 2;
+                            this.showUpgradeMessage('子弹尺寸增加！');
+                            this.updateUpgradeDisplay();
+                        } else {
+                            this.showUpgradeMessage('子弹尺寸已达上限！');
+                        }
                         break;
                     case 'weaponduration':
                         this.weaponDurationBoost += 0.5;
@@ -625,51 +675,79 @@
             }
             
             drawWeaponProgressBar() {
-                if (this.maxWeaponDuration <= 0) return;
+                const activeWeapons = [];
+                Object.keys(this.weapons).forEach(weaponType => {
+                    if (this.weapons[weaponType].active && weaponType !== 'default') {
+                        activeWeapons.push({
+                            type: weaponType,
+                            ...this.weapons[weaponType]
+                        });
+                    }
+                });
                 
-                // 进度条位置和尺寸
-                const barWidth = 60;
-                const barHeight = 6;
-                const barX = this.x + this.width/2 - barWidth/2;
-                const barY = this.y - 30;
+                if (activeWeapons.length === 0) return;
                 
-                // 计算进度百分比
-                const progress = this.weaponDuration / this.maxWeaponDuration;
-                
-                // 进度条背景
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
-                
-                // 进度条外框
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(barX, barY, barWidth, barHeight);
-                
-                // 进度条填充 - 根据剩余时间改变颜色
-                let fillColor;
-                if (progress > 0.6) {
-                    fillColor = '#00ff00'; // 绿色：时间充足
-                } else if (progress > 0.3) {
-                    fillColor = '#ffff00'; // 黄色：时间一般
-                } else {
-                    fillColor = '#ff4444'; // 红色：时间紧张
-                }
-                
-                ctx.fillStyle = fillColor;
-                ctx.fillRect(barX, barY, barWidth * progress, barHeight);
-                
-                // 添加闪烁效果当时间不足时
-                if (progress < 0.2 && Math.floor(Date.now() / 200) % 2) {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                // 为每个武器绘制进度条
+                activeWeapons.forEach((weapon, index) => {
+                    const barWidth = 50;
+                    const barHeight = 5;
+                    const barX = this.x + this.width/2 - barWidth/2;
+                    const barY = this.y - 25 - (index * 10); // 多个武器时垂直排列
+                    
+                    // 计算进度百分比
+                    const progress = weapon.duration / weapon.maxDuration;
+                    
+                    // 进度条背景
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+                    
+                    // 进度条外框
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(barX, barY, barWidth, barHeight);
+                    
+                    // 根据武器类型选择颜色
+                    let baseColor;
+                    switch(weapon.type) {
+                        case 'uzi': baseColor = '#ff6600'; break;
+                        case 'shotgun': baseColor = '#ff0066'; break;
+                        case 'laser': baseColor = '#0066ff'; break;
+                        case 'spread': baseColor = '#66ff00'; break;
+                        default: baseColor = '#ffffff'; break;
+                    }
+                    
+                    // 根据剩余时间调整亮度
+                    let fillColor;
+                    if (progress > 0.6) {
+                        fillColor = baseColor;
+                    } else if (progress > 0.3) {
+                        fillColor = '#ffff00'; // 黄色：时间一般
+                    } else {
+                        fillColor = '#ff4444'; // 红色：时间紧张
+                    }
+                    
+                    ctx.fillStyle = fillColor;
                     ctx.fillRect(barX, barY, barWidth * progress, barHeight);
-                }
-                
-                // 显示剩余时间（秒）
-                const remainingSeconds = Math.ceil(this.weaponDuration / 60);
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '10px Microsoft YaHei';
-                ctx.textAlign = 'center';
-                ctx.fillText(`${remainingSeconds}s`, barX + barWidth/2, barY - 2);
+                    
+                    // 添加闪烁效果当时间不足时
+                    if (progress < 0.2 && Math.floor(Date.now() / 200) % 2) {
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                        ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+                    }
+                    
+                    // 显示武器标识
+                    const weaponSymbols = {
+                        'uzi': 'U',
+                        'shotgun': 'S', 
+                        'laser': 'L',
+                        'spread': 'P'
+                    };
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '8px Microsoft YaHei';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(weaponSymbols[weapon.type] + weapon.level, barX - 15, barY + 4);
+                });
             }
             
             drawShieldProgressBar() {
@@ -919,7 +997,11 @@
                         }
                         
                         if (level >= 13) {
-                            availableItems.push('rapidfire', 'bigbullets');
+                            availableItems.push('rapidfire');
+                            // 只有在子弹尺寸未达到上限时才掉落大弹道具
+                            if (player.bulletSizeBoost < 8) {
+                                availableItems.push('bigbullets');
+                            }
                         }
                         
                         if (level >= 15) {

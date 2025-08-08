@@ -418,8 +418,19 @@
                             tile.active = false;
                             this.showUpgradeMessage('护盾抵挡了攻击！');
                         } else {
-                            // 没有护盾时游戏结束
-                            gameState = 'gameOver';
+                            // 没有护盾时扣除生命值
+                            lives--;
+                            document.getElementById('lives').textContent = lives;
+                            tile.active = false; // 碰撞的瓦片也消失
+                            
+                            if (lives <= 0) {
+                                gameState = 'gameOver';
+                            } else {
+                                // 还有生命时，给玩家短暂无敌时间
+                                this.shield = true;
+                                this.shieldDuration = 120; // 2秒无敌时间
+                                this.showUpgradeMessage(`生命-1! 剩余${lives}条生命`);
+                            }
                         }
                     }
                 });
@@ -517,6 +528,15 @@
                         this.weaponDurationBoost += 0.5;
                         this.showUpgradeMessage('武器持续时间延长！');
                         this.updateUpgradeDisplay();
+                        break;
+                    case 'extralife':
+                        if (lives < 9) { // 最大生命值限制为9
+                            lives += 1;
+                            this.showUpgradeMessage('生命+1！');
+                            document.getElementById('lives').textContent = lives;
+                        } else {
+                            this.showUpgradeMessage('生命已满！');
+                        }
                         break;
                 }
             }
@@ -869,11 +889,14 @@
                         const commonItems = ['uzi', 'shotgun', 'laser', 'spread', 'bomb', 'bigbomb', 'shield', 'boomerang'];
                         const rareItems = ['diagonalbomb', 'horizontalbomb', 'linebomb'];
                         const upgradeItems = ['doublebullets', 'speedboost', 'rapidfire', 'piercing', 'shieldbooster', 'magnet', 'bigbullets', 'weaponduration'];
+                        const lifeItems = ['extralife']; // 生命道具单独分类
                         
                         let randomItem;
                         const rand = Math.random();
                         
-                        if (rand < 0.15 && level >= 3) { // 15%概率掉落升级道具（3级后）
+                        if (rand < 0.05 && level >= 5) { // 5%概率掉落生命（5级后）
+                            randomItem = lifeItems[Math.floor(Math.random() * lifeItems.length)];
+                        } else if (rand < 0.15 && level >= 3) { // 10%概率掉落升级道具（3级后）
                             randomItem = upgradeItems[Math.floor(Math.random() * upgradeItems.length)];
                         } else if (rand < 0.35) { // 20%概率掉落稀有道具
                             randomItem = rareItems[Math.floor(Math.random() * rareItems.length)];
@@ -945,7 +968,8 @@
                     'shieldbooster': { color: '#ff69b4', text: '护盾+', textColor: '#fff' },
                     'magnet': { color: '#4169e1', text: '磁力', textColor: '#fff' },
                     'bigbullets': { color: '#32cd32', text: '大弹', textColor: '#000' },
-                    'weaponduration': { color: '#ffa500', text: '持久', textColor: '#000' }
+                    'weaponduration': { color: '#ffa500', text: '持久', textColor: '#000' },
+                    'extralife': { color: '#ff1493', text: '生命', textColor: '#fff' }
                 };
                 
                 const config = itemConfig[this.type] || itemConfig['uzi'];
@@ -1954,10 +1978,14 @@
             score = 0;
             level = 1;
             gameSpeed = 1;
+            lives = 3; // 重置生命值
+            currentTilePattern = '传统'; // 重置瓦片模式
             // 不再需要瓦片生成计时器，改为基于位置检测
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;
+            document.getElementById('lives').textContent = lives;
             document.getElementById('weapon').textContent = '默认';
+            document.getElementById('pattern').textContent = currentTilePattern;
 
             player = new Player();
             bullets = [];

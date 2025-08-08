@@ -338,9 +338,6 @@
                 ctx.fillStyle = '#ffdd00';
                 ctx.fillRect(this.x, this.y, this.width, this.height);
                 ctx.shadowBlur = 0;
-                
-                // 绘制武器进度条（多武器支持）
-                this.drawWeaponProgressBar();
             }
             
             moveLeft() {
@@ -2033,6 +2030,9 @@
                 itemDrops.forEach(item => item.draw());
                 boomerangs.forEach(boomerang => boomerang.draw());
                 bombs.forEach(bomb => bomb.draw());
+                
+                // 在最后绘制武器进度条，确保显示在最上层
+                player.drawWeaponProgressBar();
             } else if (gameState === 'gameOver') {
                 drawGameOver();
             }

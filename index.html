@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>六边形破坏者 - Hex Breaker</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,10 80,25 80,55 50,70 20,55 20,25' fill='%2387CEEB' stroke='%234682B4' stroke-width='3'/><text x='50' y='45' text-anchor='middle' font-family='Arial' font-size='20' font-weight='bold' fill='%23000'>破</text></svg>" />
     <style>
         body {
             margin: 0;
@@ -217,6 +218,7 @@
                 this.weapon = 'default';
                 this.weaponCooldown = 0;
                 this.weaponDuration = 0;
+                this.weaponLevel = 1; // 武器等级
                 this.shield = false;
                 this.shieldDuration = 0;
             }
@@ -227,6 +229,7 @@
                     this.weaponDuration--;
                     if (this.weaponDuration <= 0) {
                         this.weapon = 'default';
+                        this.weaponLevel = 1;
                         document.getElementById('weapon').textContent = '默认';
                     }
                 }
@@ -280,7 +283,8 @@
                         'laser': '激光炮',
                         'spread': '散射枪'
                     };
-                    ctx.fillText(weaponNames[this.weapon] || this.weapon, this.x + this.width/2, this.y - 10);
+                    const weaponText = `${weaponNames[this.weapon]} Lv${this.weaponLevel}`;
+                    ctx.fillText(weaponText, this.x + this.width/2, this.y - 10);
                 }
             }
             
@@ -309,20 +313,22 @@
                         break;
                     case 'uzi':
                         bullets.push(new Bullet(centerX, centerY, 'normal'));
-                        this.weaponCooldown = 8;
+                        this.weaponCooldown = Math.max(4, 12 - this.weaponLevel * 2); // 等级越高射速越快
                         break;
                     case 'shotgun':
-                        for (let i = -1; i <= 1; i++) {
+                        const shotgunSpread = Math.min(2 + this.weaponLevel, 5); // 等级越高散弹越多
+                        for (let i = -(shotgunSpread-1)/2; i <= (shotgunSpread-1)/2; i++) {
                             bullets.push(new Bullet(centerX + i * 15, centerY, 'normal', i * 0.5));
                         }
                         this.weaponCooldown = 30;
                         break;
                     case 'laser':
                         bullets.push(new Bullet(centerX, centerY, 'laser'));
-                        this.weaponCooldown = 15;
+                        this.weaponCooldown = Math.max(8, 18 - this.weaponLevel * 2); // 等级越高射速越快
                         break;
                     case 'spread':
-                        for (let i = -2; i <= 2; i++) {
+                        const spreadCount = Math.min(3 + this.weaponLevel, 7); // 等级越高子弹越多
+                        for (let i = -(spreadCount-1)/2; i <= (spreadCount-1)/2; i++) {
                             bullets.push(new Bullet(centerX, centerY, 'small', i * 0.3));
                         }
                         this.weaponCooldown = 25;
@@ -351,15 +357,23 @@
                     case 'shotgun':
                     case 'laser':
                     case 'spread':
-                        this.weapon = itemType;
-                        this.weaponDuration = 600;
+                        if (this.weapon === itemType) {
+                            // 相同武器升级
+                            this.weaponLevel = Math.min(this.weaponLevel + 1, 5); // 最高5级
+                            this.weaponDuration += 300; // 延长使用时间
+                        } else {
+                            // 不同武器替换
+                            this.weapon = itemType;
+                            this.weaponLevel = 1;
+                            this.weaponDuration = 600;
+                        }
                         const weaponNames = {
                             'uzi': '冲锋枪',
                             'shotgun': '霰弹枪',
                             'laser': '激光炮',
                             'spread': '散射枪'
                         };
-                        document.getElementById('weapon').textContent = weaponNames[itemType];
+                        document.getElementById('weapon').textContent = `${weaponNames[itemType]} Lv${this.weaponLevel}`;
                         break;
                     case 'bomb':
                         this.useBomb();
@@ -533,7 +547,8 @@
                     if (score % 8 === 0) {
                         level++;
                         gameSpeed += 0.1;
-                        tileSpawnDelay = Math.max(45, tileSpawnDelay - 8); // 更频繁生成
+                        // 根据等级调整生成频率和速度
+                        tileSpawnDelay = Math.max(30, 90 - level * 3); // 更频繁生成，最快每0.5秒
                         updateLevelDisplay();
                     }
                     
@@ -881,20 +896,29 @@
                 const x = startX + col * tileSpacing - tileSize/2;
                 const y = -80; // 从屏幕顶部上方开始生成
                 
-                // 根据等级调整数字范围：从小数字开始
+                // 根据等级调整数字范围：难度递增
                 let minHealth, maxHealth;
-                if (level <= 3) {
+                if (level <= 2) {
                     minHealth = 1;
-                    maxHealth = Math.min(5, level * 2);
+                    maxHealth = 3;
+                } else if (level <= 4) {
+                    minHealth = 1;
+                    maxHealth = 5;
                 } else if (level <= 6) {
-                    minHealth = 1;
-                    maxHealth = Math.min(8, level + 2);
-                } else if (level <= 10) {
                     minHealth = 2;
-                    maxHealth = Math.min(12, level + 2);
+                    maxHealth = 7;
+                } else if (level <= 8) {
+                    minHealth = 3;
+                    maxHealth = 9;
+                } else if (level <= 10) {
+                    minHealth = 4;
+                    maxHealth = 12;
+                } else if (level <= 15) {
+                    minHealth = 5;
+                    maxHealth = 15;
                 } else {
-                    minHealth = Math.floor(level / 3);
-                    maxHealth = Math.min(20, level + 5);
+                    minHealth = Math.floor(level / 2);
+                    maxHealth = Math.min(25, level + 10);
                 }
                 
                 const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
@@ -1118,38 +1142,36 @@
             score = 0;
             level = 1;
             gameSpeed = 1;
-            tileSpawnTimer = 0; // 立即开始生成，避免空行
-            tileSpawnDelay = 75; // 减少生成间隔，更频繁生成以避免空隙
+            tileSpawnTimer = 89; // 设为89，这样第二帧就会生成新瓦片
+            tileSpawnDelay = 90; // 1.5秒生成间隔（60fps）
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;
             document.getElementById('weapon').textContent = '默认';
-            
+
             player = new Player();
             bullets = [];
             tiles = [];
             itemDrops = [];
             boomerangs = [];
             bombs = [];
-            
-            // 初始生成3行瓦片，确保连续无空隙
+
+            // 初始生成4行瓦片，确保连续无空隙
             const tileSize = 50;
             const tileSpacing = 55;
             const tilesPerRow = Math.floor(canvas.width / tileSpacing);
             const startX = (canvas.width - (tilesPerRow - 1) * tileSpacing) / 2;
-            
-            for (let row = 0; row < 3; row++) {
+
+            for (let row = 0; row < 4; row++) {
                 for (let col = 0; col < tilesPerRow; col++) {
                     const x = startX + col * tileSpacing - tileSize/2;
-                    const y = row * 55 + 10; // 改为55像素间距，与后续生成保持一致
+                    const y = row * 55 + 10; // 55像素间距
                     const health = Math.floor(Math.random() * 3) + 1; // 初始简单数字
-                    
+
                     const newTile = new Tile(x, y, health);
                     tiles.push(newTile);
                 }
             }
-        }
-        
-        // 游戏主循环 - 帧率控制
+        }        // 游戏主循环 - 帧率控制
         function gameLoop(currentTime) {
             if (currentTime - lastTime >= frameInterval) {
                 update();

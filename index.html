@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>六边形破坏者 - Hex Breaker</title>
+    <title>瓦片破坏者 - Tile Breaker</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,10 80,25 80,55 50,70 20,55 20,25' fill='%2387CEEB' stroke='%234682B4' stroke-width='3'/><text x='50' y='45' text-anchor='middle' font-family='Arial' font-size='20' font-weight='bold' fill='%23000'>破</text></svg>" />
     <style>
         body {
@@ -150,7 +150,7 @@
 </head>
 <body>
     <div id="gameContainer">
-        <h1>六边形破坏者</h1>
+        <h1>瓦片破坏者</h1>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div id="gameInfo">
             <div>得分: <span id="score">0</span> | 等级: <span id="level">1</span> | 生命: <span id="lives">3</span></div>
@@ -2143,7 +2143,7 @@
             const titleSize = canvas.width < 500 ? '32px' : '48px';
             ctx.font = `${titleSize} Microsoft YaHei`;
             ctx.textAlign = 'center';
-            ctx.fillText('六边形破坏者', canvas.width/2, canvas.height/2 - 50);
+            ctx.fillText('瓦片破坏者', canvas.width/2, canvas.height/2 - 50);
             
             const subtitleSize = canvas.width < 500 ? '18px' : '24px';
             ctx.font = `${subtitleSize} Microsoft YaHei`;

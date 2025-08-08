@@ -204,8 +204,7 @@
         let gameSpeed = 1;
         let level = 1;
         let tileSpawnTimer = 0;
-        let tileSpawnDelay = 60; // 连续生成瓦片
-        let nextRowY = -60; // 下一行瓦片的Y位置
+        let tileSpawnDelay = 90; // 1.5秒生成一行（60fps）
         
         // 玩家类
         class Player {
@@ -376,14 +375,8 @@
             }
             
             useBomb() {
-                // 炸弹清除屏幕上半部分的瓦片
-                tiles.forEach(tile => {
-                    if (tile.y < canvas.height / 2) {
-                        tile.active = false;
-                        score++;
-                    }
-                });
-                document.getElementById('score').textContent = score;
+                // 发射炸弹到前方
+                bombs.push(new Bomb(this.x + this.width/2, this.y));
             }
             
             throwBoomerang() {
@@ -471,14 +464,16 @@
             draw() {
                 if (!this.active) return;
                 
-                // 根据深度调整颜色（堆叠效果）
-                const depthAlpha = Math.max(0.3, 1 - this.depth * 0.1);
-                const shadowOffset = this.depth * 2;
+                // 根据深度调整颜色（竖直堆叠效果）
+                const depthAlpha = Math.max(0.4, 1 - this.depth * 0.15);
                 
-                // 绘制阴影（堆叠效果）
+                // 绘制竖直堆叠阴影
                 if (this.depth > 0) {
-                    ctx.fillStyle = `rgba(70, 130, 180, ${depthAlpha * 0.3})`;
-                    this.drawOctagon(this.x + this.size/2 + shadowOffset, this.y + this.size/2 + shadowOffset, this.size/2);
+                    for (let d = this.depth; d > 0; d--) {
+                        const shadowAlpha = depthAlpha * 0.3 * (d / this.depth);
+                        ctx.fillStyle = `rgba(70, 130, 180, ${shadowAlpha})`;
+                        this.drawOctagon(this.x + this.size/2, this.y + this.size/2 + d * 3, this.size/2);
+                    }
                 }
                 
                 // 绘制八边形瓦片
@@ -529,11 +524,11 @@
                     score++;
                     document.getElementById('score').textContent = score;
                     
-                    // 每摧毁10个瓦片升级
-                    if (score % 10 === 0) {
+                    // 每摧毁8个瓦片升级
+                    if (score % 8 === 0) {
                         level++;
                         gameSpeed += 0.1;
-                        tileSpawnDelay = Math.max(30, tileSpawnDelay - 5); // 更频繁生成
+                        tileSpawnDelay = Math.max(45, tileSpawnDelay - 8); // 更频繁生成
                         updateLevelDisplay();
                     }
                     
@@ -612,7 +607,119 @@
             }
         }
         
-        // 回旋镖类
+        // 炸弹类
+        class Bomb {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 8;
+                this.speed = 6;
+                this.active = true;
+                this.exploded = false;
+                this.explosionRadius = 0;
+                this.maxExplosionRadius = 80;
+                this.explosionTimer = 0;
+            }
+            
+            update() {
+                if (!this.exploded) {
+                    this.y -= this.speed;
+                    
+                    // 检查与瓦片碰撞
+                    tiles.forEach(tile => {
+                        if (!tile.active || this.exploded) return;
+                        
+                        const dx = this.x - (tile.x + tile.size/2);
+                        const dy = this.y - (tile.y + tile.size/2);
+                        const distance = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if (distance < this.radius + tile.size/2) {
+                            this.explode();
+                        }
+                    });
+                    
+                    // 炸弹飞出屏幕
+                    if (this.y < -50) {
+                        this.active = false;
+                    }
+                } else {
+                    // 爆炸动画
+                    this.explosionTimer++;
+                    if (this.explosionTimer < 20) {
+                        this.explosionRadius = (this.explosionTimer / 20) * this.maxExplosionRadius;
+                    } else {
+                        this.active = false;
+                    }
+                }
+            }
+            
+            explode() {
+                this.exploded = true;
+                this.explosionTimer = 0;
+                
+                // 爆炸范围内的瓦片受到伤害
+                tiles.forEach(tile => {
+                    if (!tile.active) return;
+                    
+                    const dx = this.x - (tile.x + tile.size/2);
+                    const dy = this.y - (tile.y + tile.size/2);
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance <= this.maxExplosionRadius) {
+                        // 根据距离计算伤害
+                        const damageRatio = 1 - (distance / this.maxExplosionRadius);
+                        const damage = Math.max(1, Math.floor(tile.health * damageRatio * 0.8));
+                        
+                        for (let i = 0; i < damage; i++) {
+                            if (tile.takeDamage()) break;
+                        }
+                    }
+                });
+            }
+            
+            draw() {
+                if (!this.exploded) {
+                    // 绘制飞行中的炸弹
+                    ctx.fillStyle = '#ff4444';
+                    ctx.strokeStyle = '#cc0000';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // 炸弹闪烁效果
+                    if (Math.floor(Date.now() / 100) % 2) {
+                        ctx.fillStyle = '#ffff00';
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else {
+                    // 绘制爆炸效果
+                    const alpha = 1 - (this.explosionTimer / 20);
+                    ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.6})`;
+                    ctx.strokeStyle = `rgba(255, 200, 0, ${alpha})`;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.explosionRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // 爆炸火花
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (i / 8) * Math.PI * 2;
+                        const sparkX = this.x + Math.cos(angle) * this.explosionRadius * 0.8;
+                        const sparkY = this.y + Math.sin(angle) * this.explosionRadius * 0.8;
+                        
+                        ctx.fillStyle = `rgba(255, 255, 0, ${alpha})`;
+                        ctx.beginPath();
+                        ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        }
         class Boomerang {
             constructor(x, y) {
                 this.startX = x;
@@ -694,29 +801,45 @@
         let tiles = [];
         let itemDrops = [];
         let boomerangs = [];
+        let bombs = [];
         
         // 创建新的瓦片行
         function createNewTileRow() {
-            const tilesPerRow = Math.min(14, 8 + Math.floor(level / 3)); // 随等级增加瓦片数量
-            const startX = (canvas.width - tilesPerRow * 55) / 2;
+            // 计算瓦片数量铺满整个屏幕宽度
+            const tileSize = 50;
+            const tileSpacing = 55;
+            const tilesPerRow = Math.floor(canvas.width / tileSpacing);
+            const startX = (canvas.width - (tilesPerRow - 1) * tileSpacing) / 2;
             
             for (let col = 0; col < tilesPerRow; col++) {
-                const x = startX + col * 55;
-                const y = nextRowY; // 使用连续的Y位置
+                const x = startX + col * tileSpacing - tileSize/2;
+                const y = -80; // 从屏幕顶部上方开始生成
                 
-                // 难度递增：生命值范围扩大
-                const minHealth = Math.min(level, 5);
-                const maxHealth = Math.min(level * 2 + 8, 25);
+                // 根据等级调整数字范围：从小数字开始
+                let minHealth, maxHealth;
+                if (level <= 3) {
+                    minHealth = 1;
+                    maxHealth = Math.min(5, level * 2);
+                } else if (level <= 6) {
+                    minHealth = 1;
+                    maxHealth = Math.min(8, level + 2);
+                } else if (level <= 10) {
+                    minHealth = 2;
+                    maxHealth = Math.min(12, level + 2);
+                } else {
+                    minHealth = Math.floor(level / 3);
+                    maxHealth = Math.min(20, level + 5);
+                }
+                
                 const health = Math.floor(Math.random() * (maxHealth - minHealth + 1)) + minHealth;
-                
                 const newTile = new Tile(x, y, health);
                 
-                // 检查是否与现有瓦片重叠（堆叠效果）
+                // 检查是否与现有瓦片重叠（竖直堆叠效果）
                 let depth = 0;
                 tiles.forEach(tile => {
                     if (tile.active && 
-                        Math.abs(tile.x - x) < 45 && 
-                        Math.abs(tile.y - y) < 50) {
+                        Math.abs(tile.x - x) < 10 && // 更严格的X轴对齐
+                        tile.y > y - 55 && tile.y < y + 55) { // Y轴范围检查
                         depth = Math.max(depth, tile.depth + 1);
                     }
                 });
@@ -724,8 +847,6 @@
                 
                 tiles.push(newTile);
             }
-            
-            nextRowY -= 55; // 下一行位置向上偏移
         }
         
         // 更新等级显示
@@ -841,9 +962,12 @@
             boomerangs.forEach(boomerang => boomerang.update());
             boomerangs = boomerangs.filter(boomerang => boomerang.active);
             
+            bombs.forEach(bomb => bomb.update());
+            bombs = bombs.filter(bomb => bomb.active);
+            
             checkCollisions();
             
-            // 连续生成新的瓦片行
+            // 定时生成新的瓦片行
             tileSpawnTimer++;
             if (tileSpawnTimer >= tileSpawnDelay) {
                 createNewTileRow();
@@ -866,6 +990,7 @@
                 tiles.forEach(tile => tile.draw());
                 itemDrops.forEach(item => item.draw());
                 boomerangs.forEach(boomerang => boomerang.draw());
+                bombs.forEach(bomb => bomb.draw());
             } else if (gameState === 'gameOver') {
                 drawGameOver();
             }
@@ -885,7 +1010,7 @@
             
             const infoSize = canvas.width < 500 ? '12px' : '16px';
             ctx.font = `${infoSize} Microsoft YaHei`;
-            ctx.fillText('瓦片碰到玩家才会游戏结束', canvas.width/2, canvas.height/2 + 60);
+            ctx.fillText('瓦片从顶部生成，数字随等级增长', canvas.width/2, canvas.height/2 + 60);
             ctx.fillText('收集武器和道具强化战斗力', canvas.width/2, canvas.height/2 + 85);
         }
         
@@ -914,8 +1039,7 @@
             level = 1;
             gameSpeed = 1;
             tileSpawnTimer = 0;
-            tileSpawnDelay = 60;
-            nextRowY = -60;
+            tileSpawnDelay = 90;
             document.getElementById('score').textContent = score;
             document.getElementById('level').textContent = level;
             document.getElementById('weapon').textContent = '默认';
@@ -925,17 +1049,21 @@
             tiles = [];
             itemDrops = [];
             boomerangs = [];
+            bombs = [];
             
-            // 初始生成几行瓦片
-            for (let i = 0; i < 4; i++) {
-                createNewTileRow();
-                // 手动调整初始瓦片位置，确保连续
-                const tilesInThisRow = Math.min(14, 8 + Math.floor(level / 3));
-                const latestTiles = tiles.slice(-tilesInThisRow);
-                latestTiles.forEach(tile => {
-                    tile.y = i * 55 + 20;
-                });
-                nextRowY = (i + 1) * 55 + 20;
+            // 初始生成几行瓦片，从顶部逐行生成
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    createNewTileRow();
+                    // 调整初始瓦片位置，确保从顶部开始
+                    const tileSize = 50;
+                    const tileSpacing = 55;
+                    const tilesPerRow = Math.floor(canvas.width / tileSpacing);
+                    const latestTiles = tiles.slice(-tilesPerRow);
+                    latestTiles.forEach(tile => {
+                        tile.y = i * 60 + 10; // 从顶部区域开始
+                    });
+                }, i * 200);
             }
         }
         

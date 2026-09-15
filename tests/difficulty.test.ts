@@ -84,11 +84,24 @@ describe('calculateTileHealthRange', () => {
     expect(r.max).toBe(Math.floor(12 * 0.8));
   });
 
-  it('caps max at 40 even for absurd power, keeping min <= max', () => {
-    const r = calculateTileHealthRange(200, 60);
+  it('caps max at 40 up to level 30, even for absurd power, keeping min <= max', () => {
+    const r = calculateTileHealthRange(200, 30);
     expect(r.max).toBe(40);
     expect(r.min).toBeLessThanOrEqual(r.max);
     expect(r.min).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps the 40 cap at exactly level 30', () => {
+    expect(calculateTileHealthRange(1, 30).max).toBeLessThanOrEqual(40);
+  });
+
+  it('raises the cap by 2 per level past 30 (endgame pressure)', () => {
+    // L40: cap = 40 + 10*2 = 60; power high enough that the raw max exceeds it.
+    const r = calculateTileHealthRange(200, 40);
+    expect(r.max).toBe(60);
+    expect(r.min).toBeLessThanOrEqual(r.max);
+    // L50: cap = 80.
+    expect(calculateTileHealthRange(200, 50).max).toBe(80);
   });
 
   it('min is always at least 1', () => {
@@ -104,6 +117,16 @@ describe('tileFallSpeed', () => {
 
   it('caps the power multiplier at 1.4', () => {
     expect(tileFallSpeed(2, 1000)).toBeCloseTo(2 * 0.42 * 1.4);
+  });
+
+  it('applies no level pressure at or below level 30', () => {
+    expect(tileFallSpeed(1, 1, 30)).toBeCloseTo(tileFallSpeed(1, 1));
+    expect(tileFallSpeed(1, 1, 12)).toBeCloseTo(tileFallSpeed(1, 1));
+  });
+
+  it('adds 3% speed per level past 30 (L40 -> x1.3)', () => {
+    expect(tileFallSpeed(1, 1, 40)).toBeCloseTo(0.42 * 1.3);
+    expect(tileFallSpeed(2, 1000, 40)).toBeCloseTo(2 * 0.42 * 1.4 * 1.3);
   });
 });
 

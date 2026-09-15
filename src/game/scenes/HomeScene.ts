@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
+import { getCampaignLevel } from '../../core/levels';
 import { COLORS } from '../config/layout';
 import { tileTexture } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { BaseScene } from './BaseScene';
 
-/** Title screen: records, and entries to game / help / settings. */
+/** Title screen: campaign entry, level select / daily, endless, help/settings. */
 export class HomeScene extends BaseScene {
   constructor() {
     super('HomeScene');
@@ -15,14 +16,16 @@ export class HomeScene extends BaseScene {
     this.fadeIn();
 
     const cx = this.W / 2;
+    const save = this.svc.save.get();
+    const nextLevel = Math.min(save.campaign.unlockedLevel, 30);
 
     // Ambient octagon decorations: different stack thicknesses, low alpha,
     // slow rotate + drift, looping forever.
     const decos = [
-      { x: cx + 172, y: 168, tex: tileTexture(5), alpha: 0.5, angle: 12, dy: 16, dur: 2600 },
-      { x: cx - 180, y: 240, tex: tileTexture(3), alpha: 0.4, angle: -14, dy: 14, dur: 3200 },
-      { x: cx + 196, y: 430, tex: tileTexture(7), alpha: 0.32, angle: 24, dy: 18, dur: 3800 },
-      { x: cx - 196, y: 560, tex: tileTexture(2), alpha: 0.28, angle: -20, dy: 12, dur: 3000 },
+      { x: cx + 172, y: 148, tex: tileTexture(5), alpha: 0.5, angle: 12, dy: 16, dur: 2600 },
+      { x: cx - 180, y: 220, tex: tileTexture(3), alpha: 0.4, angle: -14, dy: 14, dur: 3200 },
+      { x: cx + 196, y: 400, tex: tileTexture(7), alpha: 0.32, angle: 24, dy: 18, dur: 3800 },
+      { x: cx - 196, y: 520, tex: tileTexture(2), alpha: 0.28, angle: -20, dy: 12, dur: 3000 },
     ];
     for (const d of decos) {
       const img = this.add.image(d.x, d.y, d.tex).setTint(COLORS.tile).setAlpha(0).setAngle(d.angle);
@@ -31,14 +34,13 @@ export class HomeScene extends BaseScene {
     }
 
     // Title with a slow +-6px float (started after the entrance settles).
-    const title = this.text(cx, 184, '瓦片破坏者', { size: 52, bold: true });
-    this.tweens.add({ targets: title, y: 172, duration: 2400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 820 });
-    const subtitle = this.text(cx, 234, 'HEX BREAKER · 无尽模式', { size: 18, color: COLORS.textSecondary });
+    const title = this.text(cx, 158, '瓦片破坏者', { size: 52, bold: true });
+    this.tweens.add({ targets: title, y: 146, duration: 2400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 820 });
+    const subtitle = this.text(cx, 208, 'HEX BREAKER · 街机射击', { size: 18, color: COLORS.textSecondary });
 
     // Records as two side-by-side capsules.
-    const save = this.svc.save.get();
     const capsule = (x: number, label: string, value: string): Phaser.GameObjects.Container => {
-      const c = this.add.container(x, 330);
+      const c = this.add.container(x, 306);
       const g = this.add.graphics();
       g.fillStyle(0x000000, 0.12);
       g.fillRoundedRect(-95, -37, 190, 84, 22);
@@ -49,14 +51,56 @@ export class HomeScene extends BaseScene {
       c.add([g, l, v]);
       return c;
     };
-    const capScore = capsule(cx - 102, '最高分', String(save.highScore));
-    const capLevel = capsule(cx + 102, '最高等级', `Lv${save.bestLevel}`);
+    const capScore = capsule(cx - 102, '无尽最高分', String(save.highScore));
+    const capLevel = capsule(cx + 102, '闯关进度', `Lv${save.campaign.unlockedLevel}`);
 
-    // Button ladder: one tall primary, two slimmer secondaries.
-    const startY = Math.min(this.H - 340, 500);
-    const startBtn = new Button(this, cx, startY, { label: '开始游戏', width: 320, height: 72, fontSize: 22, onClick: () => this.go('GameScene') });
-    const helpBtn = new Button(this, cx, startY + 92, { label: '玩法说明', variant: 'secondary', width: 320, height: 60, onClick: () => this.go('HelpScene') });
-    const settingsBtn = new Button(this, cx, startY + 168, { label: '设置', variant: 'secondary', width: 320, height: 60, onClick: () => this.go('SettingsScene') });
+    // Button ladder: campaign primary, select/daily pair, endless secondary,
+    // then help/settings as quiet ghost links.
+    const startY = Math.min(this.H - 420, 452);
+    const campaignBtn = new Button(this, cx, startY, {
+      label: `继续闯关 Lv${nextLevel}`,
+      width: 320,
+      height: 72,
+      fontSize: 22,
+      onClick: () => this.go('GameScene', { mode: 'level', level: getCampaignLevel(nextLevel) }),
+    });
+    const selectBtn = new Button(this, cx - 82, startY + 92, {
+      label: '选关',
+      variant: 'secondary',
+      width: 150,
+      height: 60,
+      onClick: () => this.go('LevelSelectScene'),
+    });
+    const dailyBtn = new Button(this, cx + 82, startY + 92, {
+      label: '每日挑战',
+      variant: 'secondary',
+      width: 150,
+      height: 60,
+      onClick: () => this.go('DailyScene'),
+    });
+    const endlessBtn = new Button(this, cx, startY + 168, {
+      label: '无尽模式',
+      variant: 'secondary',
+      width: 320,
+      height: 60,
+      onClick: () => this.go('GameScene', { mode: 'endless' }),
+    });
+    const helpBtn = new Button(this, cx - 76, startY + 246, {
+      label: '玩法说明',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => this.go('HelpScene'),
+    });
+    const settingsBtn = new Button(this, cx + 76, startY + 246, {
+      label: '设置',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => this.go('SettingsScene'),
+    });
 
     const version = this.text(cx, this.H - 36, `v${__APP_VERSION__}`, { size: 13, color: COLORS.textSecondary, alpha: 0.7 });
 
@@ -66,7 +110,10 @@ export class HomeScene extends BaseScene {
       subtitle,
       capScore,
       capLevel,
-      startBtn,
+      campaignBtn,
+      selectBtn,
+      dailyBtn,
+      endlessBtn,
       helpBtn,
       settingsBtn,
       version,
@@ -75,7 +122,7 @@ export class HomeScene extends BaseScene {
       const finalY = obj.y;
       obj.y = finalY + 12;
       obj.setAlpha(0);
-      this.tweens.add({ targets: obj, y: finalY, alpha: 1, duration: 300, delay: 100 + i * 60, ease: 'Quad.easeOut' });
+      this.tweens.add({ targets: obj, y: finalY, alpha: 1, duration: 300, delay: 100 + i * 55, ease: 'Quad.easeOut' });
     });
   }
 }

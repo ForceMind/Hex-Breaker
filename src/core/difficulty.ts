@@ -40,19 +40,22 @@ export function calculateTileHealthRange(playerPower: number, level: number): He
   const powerMultiplier = Math.max(0.8, playerPower / 9);
   const minHealth = Math.floor(baseMin * powerMultiplier);
   const maxHealth = Math.floor(baseMax * powerMultiplier);
-  // Once the cap bites, minHealth can exceed the capped max: clamp min down so
-  // the range never inverts.
-  const max = Math.min(40, Math.max(minHealth + 1, maxHealth));
+  // Endgame pressure: past level 30 the health ceiling keeps growing (+2 per
+  // level) so endless runs stay dangerous. Once the cap bites, minHealth can
+  // exceed the capped max: clamp min down so the range never inverts.
+  const cap = 40 + Math.max(0, level - 30) * 2;
+  const max = Math.min(cap, Math.max(minHealth + 1, maxHealth));
   return {
     min: Math.min(Math.max(1, minHealth), max),
     max,
   };
 }
 
-/** Downward tile speed per frame. */
-export function tileFallSpeed(gameSpeed: number, playerPower: number): number {
+/** Downward tile speed per frame; past level 30 a level-pressure term applies. */
+export function tileFallSpeed(gameSpeed: number, playerPower: number, level = 1): number {
   const speedMultiplier = Math.min(1.4, 1 + (playerPower - 1) / 15);
-  return gameSpeed * 0.42 * speedMultiplier;
+  const levelPressure = 1 + Math.max(0, level - 30) * 0.03;
+  return gameSpeed * 0.42 * speedMultiplier * levelPressure;
 }
 
 export type DifficultyLabel = '简单' | '稍难' | '中等' | '困难' | '地狱';

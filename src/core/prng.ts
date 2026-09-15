@@ -1,3 +1,13 @@
+/** FNV-1a string hash -> uint32, used to seed the daily challenge. */
+export function hashString(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
 /** Deterministic PRNG (mulberry32) so pattern generation is testable. */
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;

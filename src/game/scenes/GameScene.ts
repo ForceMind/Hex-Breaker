@@ -44,7 +44,11 @@ import {
   weaponDuration,
 } from '../../core/config';
 import { calculatePlayerPower, calculateTileDensity, calculateTileHealthRange, difficultyLabel, tileFallSpeed } from '../../core/difficulty';
+import { formatTimeMs } from '../../core/format';
+import type { LevelDef } from '../../core/levels';
+import { getCampaignLevel } from '../../core/levels';
 import { generatePattern, pickPattern } from '../../core/patterns';
+import { mulberry32 } from '../../core/prng';
 import type { BombType, BulletKind, ItemType, SpecialWeaponType, WeaponState, WeaponType } from '../../core/types';
 import { SPECIAL_WEAPONS } from '../../core/types';
 import { COLORS, css, DEPTH, FONT_FAMILY } from '../config/layout';
@@ -53,6 +57,7 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { showToast } from '../ui/Toast';
 import { BaseScene } from './BaseScene';
+import { SHIP_LOAD_FAILED_KEY, SHIP_TEXTURE_KEY } from './BootScene';
 
 interface TileRec {
   id: number;
@@ -119,15 +124,23 @@ interface BoomerangRec {
 
 interface HudCache {
   score: number;
-  level: number;
+  chip: string;
   lives: number;
   info: string;
 }
+
+/** Scene-start payload: endless (default), campaign level, or daily challenge. */
+export type GameSceneData = { mode: 'endless' } | { mode: 'level'; level: LevelDef } | { mode: 'daily'; level: LevelDef; dateKey: string };
 
 /**
  * Endless mode: octagon tiles stream down from the top; the player dodges and
  * shoots them. One Phaser frame = one logic frame, so every frame-based
  * constant from the original demo carries over unchanged.
+ *
+ * Level/daily modes reuse the same sandbox with three changes: randomness is
+ * seeded (LevelDef.seed), the difficulty formulas anchor on
+ * LevelDef.virtualLevel instead of the in-run level, and the run ends in
+ * victory once LevelDef.targetKills tiles are destroyed.
  *
  * Juice inventory (Arrow Flow recipe): per-tile soft shadow + glaze, pop-in
  * stagger per column, hit pulse + white flash, shatter + diamond sparks +
@@ -140,6 +153,15 @@ export class GameScene extends BaseScene {
     super('GameScene');
   }
 
+  // --- mode ------------------------------------------------------------------
+  private mode: GameSceneData['mode'] = 'endless';
+  private levelDef: LevelDef | null = null;
+  private dateKey = '';
+  private runData: GameSceneData = { mode: 'endless' };
+  private victoryStarted = false;
+  private livesLost = 0;
+  private elapsedFrames = 0;
+
   // --- run state -------------------------------------------------------------
   private playing = false;
   private paused = false;
@@ -149,6 +171,8 @@ export class GameScene extends BaseScene {
   private gameSpeed = 1;
   private lives = START_LIVES;
   private currentPattern: string = FULL_ROW_NAME;
+  /** Run randomness; seeded in level/daily modes, plain Math.random in endless. */
+  private rng: () => number = Math.random;
 
   // --- player state ----------------------------------------------------------
   private px = 0; // left edge
@@ -185,10 +209,12 @@ export class GameScene extends BaseScene {
   private levelChipG!: Phaser.GameObjects.Graphics;
   private levelChipT!: Phaser.GameObjects.Text;
   private hudInfo!: Phaser.GameObjects.Text;
-  private hudCache: HudCache = { score: -1, level: -1, lives: -1, info: '' };
+  private hudCache: HudCache = { score: -1, chip: '', lives: -1, info: '' };
   private barGfx!: Phaser.GameObjects.Graphics;
   private barLabels: Phaser.GameObjects.Text[] = [];
   private barTimes: Phaser.GameObjects.Text[] = [];
+  private targetGfx: Phaser.GameObjects.Graphics | null = null;
+  private targetText: Phaser.GameObjects.Text | null = null;
   private vignette!: Phaser.GameObjects.Image;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   private overLayer: Phaser.GameObjects.Container | null = null;
@@ -203,6 +229,15 @@ export class GameScene extends BaseScene {
   private pointerWorldX: number | null = null;
 
   private readonly tilesPerRow = Math.floor(540 / TILE_SPACING);
+
+  override init(data?: GameSceneData): void {
+    super.init(data);
+    const d: GameSceneData = data ?? { mode: 'endless' };
+    this.runData = d;
+    this.mode = d.mode;
+    this.levelDef = d.mode === 'endless' ? null : d.level;
+    this.dateKey = d.mode === 'daily' ? d.dateKey : '';
+  }
 
   create(): void {
     this.addBackground();
@@ -231,6 +266,11 @@ export class GameScene extends BaseScene {
     this.paused = false;
     this.tiltTween = null;
     this.trailFrame = 0;
+    this.victoryStarted = false;
+    this.livesLost = 0;
+    this.elapsedFrames = 0;
+    // Seeded runs make a level/daily play out identically for every player.
+    this.rng = this.levelDef ? mulberry32(this.levelDef.seed) : Math.random;
 
     this.px = this.W / 2 - PLAYER_WIDTH / 2;
     this.py = this.H - PLAYER_BOTTOM_MARGIN - PLAYER_HEIGHT;
@@ -262,10 +302,15 @@ export class GameScene extends BaseScene {
   }
 
   private buildViews(): void {
-    // player
-    this.playerView = this.add.container(this.px + PLAYER_WIDTH / 2, this.py + PLAYER_HEIGHT / 2).setDepth(DEPTH.player);
+    // player: pre-generated ship art when available, else the procedural block
+    const playerCenterX = this.px + PLAYER_WIDTH / 2;
+    const playerCenterY = this.py + PLAYER_HEIGHT / 2;
+    this.playerView = this.add.container(playerCenterX, playerCenterY).setDepth(DEPTH.player);
     const glow = this.add.image(0, 0, TEX.softCircle).setTint(0xffdd00).setAlpha(0.5).setScale(0.5);
-    const body = this.add.image(0, 0, TEX.player).setTint(0xffdd00).setDisplaySize(PLAYER_WIDTH, PLAYER_HEIGHT);
+    const hasShip = this.textures.exists(SHIP_TEXTURE_KEY) && this.registry.get(SHIP_LOAD_FAILED_KEY) !== true;
+    const body = hasShip
+      ? this.add.image(0, 0, SHIP_TEXTURE_KEY).setDisplaySize(56, 56)
+      : this.add.image(0, 0, TEX.player).setTint(0xffdd00).setDisplaySize(PLAYER_WIDTH, PLAYER_HEIGHT);
     this.shieldRing = this.add.image(0, 0, TEX.shieldRing).setTint(0x00e5e5).setScale(0.5).setVisible(false);
     this.playerView.add([glow, body, this.shieldRing]);
 
@@ -362,6 +407,11 @@ export class GameScene extends BaseScene {
     }).setDepth(hudDepth);
 
     this.barGfx = this.add.graphics().setDepth(hudDepth);
+    // Level/daily modes: a slim target-progress bar just under the HUD band.
+    if (this.levelDef) {
+      this.targetGfx = this.add.graphics().setDepth(hudDepth);
+      this.targetText = this.text(this.W / 2, 143, '', { size: 12, bold: true, color: COLORS.textSecondary }).setDepth(hudDepth);
+    }
     for (let i = 0; i < 4; i++) {
       const label = this.text(0, 0, '', { size: 12, bold: true, align: 'left' }).setDepth(hudDepth).setVisible(false);
       label.setStroke('#ffffff', 2);
@@ -384,7 +434,7 @@ export class GameScene extends BaseScene {
     kb?.on('keydown-P', () => this.togglePause());
     kb?.on('keydown-ESC', () => this.exitToHome());
     kb?.on('keydown-SPACE', () => {
-      if (!this.playing && this.overLayer) this.refresh();
+      if (!this.playing && this.overLayer) this.refresh(this.runData);
     });
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -443,7 +493,7 @@ export class GameScene extends BaseScene {
       const y = row * TILE_SPACING + FIRST_ROW_Y;
       const startCenterX = (this.W - (this.tilesPerRow - 1) * TILE_SPACING) / 2;
       for (let col = 0; col < this.tilesPerRow; col++) {
-        const health = Math.floor(Math.random() * INITIAL_HEALTH_MAX) + 1;
+        const health = Math.floor(this.rng() * INITIAL_HEALTH_MAX) + 1;
         // Bottom rows pop first, columns cascade left to right.
         this.spawnTile(startCenterX + col * TILE_SPACING, y + TILE_SIZE / 2, health, (INITIAL_ROWS - 1 - row) * 70 + col * 20);
       }
@@ -452,6 +502,7 @@ export class GameScene extends BaseScene {
 
   /** Row generation driven by the topmost tile position, as in the original. */
   private maintainRows(): void {
+    if (this.victoryStarted) return; // board is being cleared for the finale
     let topMostY = this.H;
     let hasActive = false;
     for (const t of this.tiles) {
@@ -466,17 +517,23 @@ export class GameScene extends BaseScene {
     }
   }
 
+  /** The level argument fed into the difficulty formulas for this run. */
+  private difficultyLevel(): number {
+    return this.levelDef ? this.levelDef.virtualLevel : this.level;
+  }
+
   private spawnRowAt(yTop: number): void {
-    const useShaped = this.level >= SHAPED_ROW_MIN_LEVEL && Math.random() < SHAPED_ROW_CHANCE;
+    const dl = this.difficultyLevel();
+    const useShaped = dl >= SHAPED_ROW_MIN_LEVEL && this.rng() < SHAPED_ROW_CHANCE;
     const power = this.playerPower();
-    const healthRange = calculateTileHealthRange(power, this.level);
+    const healthRange = calculateTileHealthRange(power, dl);
     const rollHealth = (): number =>
-      Math.floor(Math.random() * (healthRange.max - healthRange.min + 1)) + healthRange.min;
+      Math.floor(this.rng() * (healthRange.max - healthRange.min + 1)) + healthRange.min;
 
     if (useShaped) {
-      const pattern = pickPattern();
+      const pattern = pickPattern(this.rng);
       this.currentPattern = PATTERN_NAMES[pattern];
-      const mask = generatePattern(pattern, this.tilesPerRow);
+      const mask = generatePattern(pattern, this.tilesPerRow, this.rng);
       const startCenterX = (this.W - (this.tilesPerRow - 1) * TILE_SPACING) / 2;
       for (let col = 0; col < this.tilesPerRow; col++) {
         if (!mask[col]) continue;
@@ -484,7 +541,7 @@ export class GameScene extends BaseScene {
       }
     } else {
       this.currentPattern = FULL_ROW_NAME;
-      const density = calculateTileDensity(power, this.level);
+      const density = calculateTileDensity(power, dl);
       const count = Math.floor(this.tilesPerRow * density);
       const startCenterX = (this.W - (count - 1) * TILE_SPACING) / 2;
       for (let col = 0; col < count; col++) {
@@ -566,7 +623,7 @@ export class GameScene extends BaseScene {
     this.score += 1;
     this.svc.audio.hit();
     this.shatter.explode(10, t.cx, t.cy);
-    this.sparks.explode(4 + Math.floor(Math.random() * 3), t.cx, t.cy);
+    this.sparks.explode(4 + Math.floor(this.rng() * 3), t.cx, t.cy);
     this.shockwave(t.cx, t.cy, 0.9);
     const now = Date.now();
     if (now - this.lastShakeAt > 400) {
@@ -582,10 +639,16 @@ export class GameScene extends BaseScene {
       this.sparks.explode(8, this.W / 2, this.H * 0.4);
     }
 
-    if (Math.random() < dropChance(this.level)) {
-      const pool = availableItems(this.level, this.bulletSizeBoost);
-      const pick = pool[Math.floor(Math.random() * pool.length)];
+    if (this.rng() < dropChance(this.difficultyLevel())) {
+      const tier = this.levelDef ? this.levelDef.itemTierCap : this.level;
+      const pool = availableItems(tier, this.bulletSizeBoost);
+      const pick = pool[Math.floor(this.rng() * pool.length)];
       if (pick) this.spawnItem(t.cx, t.cy, pick);
+    }
+
+    // Win condition for level/daily runs.
+    if (this.levelDef && !this.victoryStarted && this.score >= this.levelDef.targetKills) {
+      this.startVictory();
     }
   }
 
@@ -711,7 +774,7 @@ export class GameScene extends BaseScene {
 
   private launchBomb(type: BombType): void {
     const params = BOMB_PARAMS[type];
-    const sign = params.randomSignX ? (Math.random() > 0.5 ? 1 : -1) : 1;
+    const sign = params.randomSignX ? (this.rng() > 0.5 ? 1 : -1) : 1;
     const x = this.px + PLAYER_WIDTH / 2;
     const y = this.py;
     const img = this.add.image(0, 0, TEX.bomb).setTint(params.color).setScale((params.bodyRadius * 2) / 40);
@@ -1007,6 +1070,7 @@ export class GameScene extends BaseScene {
 
   override update(): void {
     if (!this.playing || this.paused) return;
+    this.elapsedFrames++;
 
     this.handleInput();
     this.updatePlayerState();
@@ -1116,6 +1180,7 @@ export class GameScene extends BaseScene {
   }
 
   private checkPlayerTileCollision(): void {
+    if (this.victoryStarted) return; // invulnerable during the victory cascade
     for (const t of this.tiles) {
       if (!t.active) continue;
       const half = TILE_SIZE / 2;
@@ -1133,6 +1198,7 @@ export class GameScene extends BaseScene {
         showToast(this, this.W / 2, this.H * 0.45, '护盾抵挡了攻击！');
       } else {
         this.lives--;
+        this.livesLost++;
         t.active = false;
         t.view.destroy();
         this.svc.audio.hurt();
@@ -1167,7 +1233,7 @@ export class GameScene extends BaseScene {
   }
 
   private updateTiles(): void {
-    const fall = tileFallSpeed(this.gameSpeed, this.playerPower());
+    const fall = tileFallSpeed(this.gameSpeed, this.playerPower(), this.difficultyLevel());
     for (const t of this.tiles) {
       if (!t.active) continue;
       t.cy += fall;
@@ -1281,10 +1347,12 @@ export class GameScene extends BaseScene {
       this.scoreChipG.clear();
       this.scoreChipG.fillStyle(0xffffff, 0.85);
       this.scoreChipG.fillRoundedRect(16, 12, w, 36, 18);
+      this.refreshTargetBar();
     }
-    if (force || c.level !== this.level) {
-      c.level = this.level;
-      this.levelChipT.setText(`等级 ${this.level}`);
+    const chip = this.mode === 'level' && this.levelDef ? `关卡 ${this.levelDef.id}` : this.mode === 'daily' ? '每日挑战' : `等级 ${this.level}`;
+    if (force || c.chip !== chip) {
+      c.chip = chip;
+      this.levelChipT.setText(chip);
       const w = this.levelChipT.width + 24;
       this.levelChipG.clear();
       this.levelChipG.fillStyle(0xffffff, 0.85);
@@ -1300,6 +1368,26 @@ export class GameScene extends BaseScene {
       c.info = info;
       this.hudInfo.setText(info);
     }
+  }
+
+  /** Slim progress bar + 「目标 x/y」 caption under the HUD band. */
+  private refreshTargetBar(): void {
+    if (!this.targetGfx || !this.levelDef) return;
+    const target = this.levelDef.targetKills;
+    const progress = Math.min(1, this.score / target);
+    const x = 16;
+    const w = this.W - 32;
+    const g = this.targetGfx;
+    g.clear();
+    g.fillStyle(0xffffff, 0.8);
+    g.fillRoundedRect(x, 122, w, 10, 5);
+    const inset = 2;
+    const innerW = (w - inset * 2) * progress;
+    if (innerW >= 6) {
+      g.fillStyle(COLORS.accent, 0.95);
+      g.fillRoundedRect(x + inset, 122 + inset, innerW, 6, 3);
+    }
+    this.targetText?.setText(`目标 ${Math.min(this.score, target)}/${target}`);
   }
 
   private refreshHearts(): void {
@@ -1409,18 +1497,166 @@ export class GameScene extends BaseScene {
 
   private exitToHome(): void {
     this.finalizeRun();
-    this.go('HomeScene');
+    this.go(this.mode === 'level' ? 'LevelSelectScene' : this.mode === 'daily' ? 'DailyScene' : 'HomeScene');
+  }
+
+  private elapsedMs(): number {
+    return Math.round((this.elapsedFrames / 60) * 1000);
   }
 
   private finalizeRun(): void {
     if (this.finalized) return;
     this.finalized = true;
-    this.svc.save.recordGameResult(this.score, this.level);
+    // Only endless runs feed the all-time high score; level/daily results are
+    // recorded at the moment of victory/defeat instead.
+    if (this.mode === 'endless') this.svc.save.recordGameResult(this.score, this.level);
   }
 
   private gameOver(): void {
     this.playing = false;
     this.lives = 0;
+    if (this.mode === 'endless') this.endlessGameOver();
+    else this.defeat();
+  }
+
+  // ============================================================================
+  // victory / defeat (level & daily modes)
+  // ============================================================================
+
+  /**
+   * Target reached: stop spawning rows, chain-explode whatever tiles remain
+   * (top to bottom, 30 ms apart), then confetti + fanfare + the result modal.
+   */
+  private startVictory(): void {
+    this.victoryStarted = true;
+    const remaining = this.tiles.filter((t) => t.active).sort((a, b) => a.cy - b.cy || a.cx - b.cx);
+    remaining.forEach((t, i) => {
+      this.time.delayedCall(i * 30, () => {
+        if (!t.active) return;
+        t.active = false;
+        this.shatter.explode(10, t.cx, t.cy);
+        this.sparks.explode(5, t.cx, t.cy);
+        this.shockwave(t.cx, t.cy, 0.9);
+        t.view.destroy();
+      });
+    });
+    const clearedAt = remaining.length * 30 + 150;
+    this.time.delayedCall(clearedAt, () => {
+      this.playing = false;
+      this.svc.audio.win();
+      this.svc.vibration.win();
+      this.confettiFx.start();
+      this.time.delayedCall(1600, () => this.confettiFx.stop());
+    });
+    this.time.delayedCall(clearedAt + 450, () => this.showVictory());
+  }
+
+  private starCount(): number {
+    return this.livesLost === 0 ? 3 : this.livesLost <= 1 ? 2 : 1;
+  }
+
+  private showVictory(): void {
+    const def = this.levelDef;
+    if (!def) return;
+    const timeMs = this.elapsedMs();
+    const stars = this.starCount();
+    if (this.mode === 'level') this.svc.save.recordCampaignResult(def.id, stars, timeMs);
+    else if (this.mode === 'daily') this.svc.save.recordDailyResult(this.dateKey, stars, timeMs);
+    this.finalized = true;
+
+    const hasNext = this.mode === 'level' && def.id < 30;
+    const modal = new Modal(this, this.W, this.H, {
+      width: 400,
+      height: 480,
+      title: this.mode === 'level' ? `关卡 ${def.id} 完成！` : '每日挑战完成！',
+    });
+
+    // Three stars popping in one by one (Arrow Flow rhythm: 250 + i*260 ms,
+    // scale 0 -> 1, 320 ms Back.easeOut); unearned stars stay dim.
+    const row = this.add.container(0, -112);
+    modal.panel.add(row);
+    for (let i = 0; i < 3; i++) {
+      const star = this.add.image((i - 1) * 84, 0, TEX.glyphStar).setTint(i < stars ? 0xffb703 : 0xc9d9e8);
+      star.setDisplaySize(58, 58);
+      const targetScale = star.scaleX;
+      star.setScale(0);
+      row.add(star);
+      this.tweens.add({ targets: star, scaleX: targetScale, scaleY: targetScale, delay: 250 + i * 260, duration: 320, ease: 'Back.easeOut' });
+      if (i < stars) this.time.delayedCall(250 + i * 260, () => this.svc.audio.pickup());
+    }
+
+    modal.panel.add(this.text(0, -36, `用时 ${formatTimeMs(timeMs)} · 消灭 ${this.score}`, { size: 17, bold: true }));
+    modal.panel.add(
+      this.text(0, -6, stars === 3 ? '完美通关，一命未失！' : stars === 2 ? '仅失一命，表现出色！' : '通关成功，试试无伤挑战！', {
+        size: 13,
+        color: COLORS.textSecondary,
+      }),
+    );
+
+    const buttons: Button[] = [];
+    if (hasNext) {
+      buttons.push(
+        new Button(this, 0, 62, {
+          label: `下一关 Lv${def.id + 1}`,
+          width: 280,
+          height: 58,
+          onClick: () => this.go('GameScene', { mode: 'level', level: getCampaignLevel(def.id + 1) } satisfies GameSceneData),
+        }),
+      );
+      buttons.push(new Button(this, 0, 134, { label: '重玩本关', variant: 'secondary', width: 280, height: 52, onClick: () => this.refresh(this.runData) }));
+      buttons.push(
+        new Button(this, 0, 200, { label: '返回', variant: 'secondary', width: 280, height: 52, onClick: () => this.go('LevelSelectScene') }),
+      );
+    } else {
+      buttons.push(new Button(this, 0, 86, { label: '再玩一次', width: 280, height: 58, onClick: () => this.refresh(this.runData) }));
+      buttons.push(
+        new Button(this, 0, 162, {
+          label: '返回',
+          variant: 'secondary',
+          width: 280,
+          height: 52,
+          onClick: () => this.go(this.mode === 'daily' ? 'DailyScene' : 'LevelSelectScene'),
+        }),
+      );
+    }
+    modal.panel.add(buttons);
+    this.overLayer = modal;
+  }
+
+  private defeat(): void {
+    // A failed daily run still counts as showing up (0 stars keeps the streak).
+    if (this.mode === 'daily') this.svc.save.recordDailyResult(this.dateKey, 0, this.elapsedMs());
+    this.finalized = true;
+    this.svc.audio.gameover();
+
+    const modal = new Modal(this, this.W, this.H, { width: 400, height: 430, title: '挑战失败' });
+    const icon = this.add.container(0, -112);
+    const g = this.add.graphics();
+    g.fillStyle(COLORS.danger, 1);
+    g.fillCircle(0, 0, 36);
+    g.fillStyle(0xffffff, 0.25);
+    g.fillCircle(-8, -10, 14);
+    icon.add([g, this.text(0, -2, '✕', { size: 38, bold: true, color: 0xffffff })]);
+    icon.setScale(0.6);
+    this.tweens.add({ targets: icon, scaleX: 1, scaleY: 1, duration: 260, ease: 'Back.easeOut' });
+    modal.panel.add(icon);
+
+    modal.panel.add(this.text(0, -42, `进度 ${this.score} / ${this.levelDef?.targetKills ?? 0}`, { size: 22, bold: true }));
+    modal.panel.add(this.text(0, -10, '再接再厉，目标就在前方！', { size: 13, color: COLORS.textSecondary }));
+    modal.panel.add([
+      new Button(this, 0, 72, { label: '重试', width: 280, height: 58, onClick: () => this.refresh(this.runData) }),
+      new Button(this, 0, 146, {
+        label: '返回',
+        variant: 'secondary',
+        width: 280,
+        height: 52,
+        onClick: () => this.go(this.mode === 'daily' ? 'DailyScene' : 'LevelSelectScene'),
+      }),
+    ]);
+    this.overLayer = modal;
+  }
+
+  private endlessGameOver(): void {
     const { newHighScore, newBestLevel } = this.svc.save.recordGameResult(this.score, this.level);
     this.finalized = true;
     const isRecord = newHighScore || newBestLevel;

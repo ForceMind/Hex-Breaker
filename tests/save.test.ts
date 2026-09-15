@@ -48,6 +48,37 @@ describe('migrate', () => {
     expect(d.daily).toEqual({ lastPlayedDate: '', streak: 0, bestStars: 0, bestTimeMs: 0 });
   });
 
+  it('upgrades v3 saves by filling economy and theme defaults', () => {
+    const v3 = {
+      version: 3,
+      highScore: 42,
+      campaign: { unlockedLevel: 6, records: { 5: { stars: 2, bestTimeMs: 40000 } } },
+      daily: { lastPlayedDate: '2026-04-09', streak: 3, bestStars: 2, bestTimeMs: 70000 },
+    };
+    const d = migrate(v3);
+    expect(d.version).toBe(SAVE_VERSION);
+    expect(d.campaign.unlockedLevel).toBe(6);
+    expect(d.campaign.records[5]).toEqual({ stars: 2, bestTimeMs: 40000 });
+    expect(d.daily.streak).toBe(3);
+    expect(d.economy).toEqual({ coins: 0, totalEarned: 0 });
+    expect(d.selectedTheme).toBe('sky');
+    expect(d.unlockedThemes).toEqual(['sky']);
+  });
+
+  it('sanitizes v4 theme fields: sky always owned, selection must be owned', () => {
+    const d = migrate({
+      economy: { coins: 120.6, totalEarned: 500 },
+      selectedTheme: 'neon',
+      unlockedThemes: ['forest', 'forest', 7, 'neon'],
+    });
+    expect(d.economy).toEqual({ coins: 121, totalEarned: 500 });
+    expect(d.unlockedThemes).toEqual(['sky', 'forest', 'neon']);
+    expect(d.selectedTheme).toBe('neon');
+    const broken = migrate({ selectedTheme: 'neon', unlockedThemes: [] });
+    expect(broken.unlockedThemes).toEqual(['sky']);
+    expect(broken.selectedTheme).toBe('sky');
+  });
+
   it('preserves valid campaign/daily payloads and sanitizes bad entries', () => {
     const d = migrate({
       campaign: {
@@ -225,6 +256,66 @@ describe('SaveService', () => {
       expect(svc.recordDailyResult('2026-04-09', 0, 9999)).toEqual({ improved: false });
       expect(svc.recordDailyResult('2026-04-09', 1, 99999)).toEqual({ improved: true });
       expect(svc.get().daily.bestTimeMs).toBe(99999);
+    });
+  });
+
+  describe('economy', () => {
+    it('addCoins accumulates balance and lifetime earnings', () => {
+      const svc = new SaveService(memoryStorage());
+      svc.addCoins(30);
+      svc.addCoins(10.6); // rounds to 11
+      expect(svc.get().economy).toEqual({ coins: 41, totalEarned: 41 });
+    });
+
+    it('spendCoins deducts when affordable and rejects when short', () => {
+      const svc = new SaveService(memoryStorage());
+      svc.addCoins(100);
+      expect(svc.spendCoins(60)).toBe(true);
+      expect(svc.get().economy.coins).toBe(40);
+      expect(svc.spendCoins(41)).toBe(false);
+      expect(svc.get().economy.coins).toBe(40); // unchanged on rejection
+      expect(svc.get().economy.totalEarned).toBe(100); // spending never reduces earnings
+    });
+
+    it('persists coins across service instances', () => {
+      const storage = memoryStorage();
+      const svc = new SaveService(storage);
+      svc.addCoins(75);
+      svc.spendCoins(25);
+      expect(new SaveService(storage).get().economy.coins).toBe(50);
+    });
+  });
+
+  describe('theme unlock state machine', () => {
+    it('starts with only sky owned and selected', () => {
+      const svc = new SaveService(memoryStorage());
+      expect(svc.get().unlockedThemes).toEqual(['sky']);
+      expect(svc.get().selectedTheme).toBe('sky');
+    });
+
+    it('rejects selecting a locked theme', () => {
+      const svc = new SaveService(memoryStorage());
+      expect(svc.selectTheme('neon')).toBe(false);
+      expect(svc.get().selectedTheme).toBe('sky');
+    });
+
+    it('unlock -> select applies; unlock is idempotent', () => {
+      const svc = new SaveService(memoryStorage());
+      svc.unlockTheme('forest');
+      svc.unlockTheme('forest');
+      expect(svc.get().unlockedThemes).toEqual(['sky', 'forest']);
+      expect(svc.selectTheme('forest')).toBe(true);
+      expect(svc.get().selectedTheme).toBe('forest');
+    });
+
+    it('buy flow: spendCoins then unlockTheme then selectTheme', () => {
+      const svc = new SaveService(memoryStorage());
+      svc.addCoins(200);
+      expect(svc.spendCoins(150)).toBe(true);
+      svc.unlockTheme('sunset');
+      expect(svc.selectTheme('sunset')).toBe(true);
+      expect(svc.get().economy.coins).toBe(50);
+      expect(svc.get().selectedTheme).toBe('sunset');
     });
   });
 });

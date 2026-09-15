@@ -1,4 +1,4 @@
-import { COLORS } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { ensureTextures, tileTexture } from '../rendering/textures';
 import { BaseScene } from './BaseScene';
 
@@ -19,6 +19,7 @@ export class BootScene extends BaseScene {
 
   create(): void {
     ensureTextures(this);
+    const COLORS = themeColors();
     this.cameras.main.setBackgroundColor(COLORS.bgTop);
 
     const cx = this.W / 2;

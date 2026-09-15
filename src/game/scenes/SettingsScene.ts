@@ -1,4 +1,4 @@
-import { COLORS } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { Toggle } from '../ui/Toggle';
@@ -14,6 +14,7 @@ export class SettingsScene extends BaseScene {
   create(): void {
     this.addBackground();
     this.fadeIn();
+    const COLORS = themeColors();
 
     const cx = this.W / 2;
     this.text(cx, 66, '设置', { size: 34, bold: true });
@@ -69,7 +70,7 @@ export class SettingsScene extends BaseScene {
 
   private confirmReset(): void {
     const modal = new Modal(this, this.W, this.H, { width: 420, height: 300, title: '清除存档' });
-    const msg = this.text(0, -40, '将清空最高分、最高等级与全部统计，\n且无法恢复。确定要继续吗？', { size: 18, color: COLORS.textSecondary, lineSpacing: 6 });
+    const msg = this.text(0, -40, '将清空最高分、最高等级与全部统计，\n且无法恢复。确定要继续吗？', { size: 18, color: themeColors().textSecondary, lineSpacing: 6 });
     modal.panel.add(msg);
     const yes = new Button(this, -100, 70, {
       label: '确定清除',

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { COLORS, css, DEPTH, FONT_FAMILY } from '../config/layout';
+import { css, DEPTH, FONT_FAMILY } from '../config/layout';
+import { themeColors } from '../config/themes';
 
 export interface ModalOptions {
   width?: number;
@@ -23,6 +24,7 @@ export class Modal extends Phaser.GameObjects.Container {
 
   constructor(scene: Phaser.Scene, designWidth: number, designHeight: number, opts: ModalOptions = {}) {
     super(scene, 0, 0);
+    const COLORS = themeColors();
     this.panelWidth = opts.width ?? 440;
     this.panelHeight = opts.height ?? 420;
     this.setDepth(opts.depth ?? DEPTH.modal);

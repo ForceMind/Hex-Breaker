@@ -4,7 +4,7 @@
 
 ![平台](https://img.shields.io/badge/Platform-Web-brightgreen)
 ![技术栈](https://img.shields.io/badge/Tech-Phaser%203%20%7C%20TypeScript%20%7C%20Vite-blue)
-![版本](https://img.shields.io/badge/Version-2.0.0-orange)
+![版本](https://img.shields.io/badge/Version-2.2.0-orange)
 
 🌐 线上地址：<https://hex-breaker.pages.dev>
 
@@ -19,6 +19,10 @@
 - **13 种行阵型**：L3 起出现走廊 / 墙壁 / 菱形 / 波浪 / 隧道 等阵型（见下文阵型表）
 - **3 命制**：被撞扣命并短暂无敌，生命上限 9
 - **最高分本地存档**：最高分、最高等级、累计统计写入 localStorage
+- **BOSS 关**：战役第 10 / 20 / 30 关，顶部漂移的大号 BOSS + 护卫瓦片波次，血条取代目标进度
+- **金币经济**：通关 / 每日 / 无尽结算产出金币，胜利与结束面板显示入账，主页右上角金币徽章
+- **主题皮肤**：天空 / 森林 / 落日 / 霓虹四套配色，金币解锁，切换后全场景生效
+- **模拟周榜**：无尽模式本周排行榜，100 名模拟玩家由周种子幂律生成，每周自动重置
 - **合成音效 + 震动**：全部音效用 Web Audio 实时合成（无任何音频文件），移动端支持震动反馈
 - **PC / 移动端双适配**：PC 宽屏下呈现居中圆角「手机框」竖屏卡片，移动端全屏沉浸
 
@@ -36,7 +40,7 @@ npm run dev        # 开发服务器（默认 http://localhost:5173）
 ```bash
 npm run build      # 类型检查 + 产物构建到 dist/
 npm run preview    # 本地预览构建产物
-npm test           # 运行 vitest（4 个测试文件，52 个用例）
+npm test           # 运行 vitest（8 个测试文件，101 个用例）
 npm run typecheck  # 仅运行 TypeScript 类型检查
 ```
 
@@ -147,22 +151,26 @@ Hex-Breaker/
 │   ├── main.ts             # Phaser 启动配置、服务初始化、全局事件
 │   ├── core/               # 纯逻辑层（无 Phaser 依赖，可单测）
 │   │   ├── config.ts       # 全部玩法数值表
-│   │   ├── difficulty.ts   # 战力 / 密度 / 血量 / 速度公式
+│   │   ├── difficulty.ts   # 战力 / 密度 / 血量 / 速度公式（含 Lv30 后终局压力）
+│   │   ├── levels.ts       # 30 关战役表 / BOSS 关 / 每日挑战种子
+│   │   ├── economy.ts      # 金币产出规则
 │   │   ├── patterns.ts     # 13 种行阵型生成
-│   │   ├── prng.ts         # 可播种随机数（mulberry32）
+│   │   ├── prng.ts         # 可播种随机数（mulberry32 + FNV 字符串 hash）
 │   │   └── types.ts        # 共享类型
 │   ├── services/           # 平台服务（无 Phaser 依赖）
-│   │   ├── save.ts         # localStorage 存档
+│   │   ├── save.ts         # localStorage 存档（v4：战役 / 每日 / 金币 / 主题）
+│   │   ├── leaderboard.ts  # 无尽周榜（ISO 周种子幂律模拟）
 │   │   ├── audio.ts        # Web Audio 合成音效
 │   │   └── vibration.ts    # 震动封装
 │   ├── game/
-│   │   ├── config/layout.ts    # 设计分辨率 / 调色板 / 深度层
-│   │   ├── scenes/             # Boot / Home / Help / Settings / Game 五场景
+│   │   ├── config/layout.ts    # 设计分辨率 / 深度层
+│   │   ├── config/themes.ts    # 四套主题配色 + 当前主题
+│   │   ├── scenes/             # Boot / Home / Help / Settings / LevelSelect / Daily / Theme / Leaderboard / Game
 │   │   ├── ui/                 # Button / Modal / Toast / Toggle / Background
 │   │   ├── rendering/textures.ts  # 程序生成贴图
 │   │   └── services.ts         # 服务单例组装
 │   └── styles/global.css   # 页面布局（PC 手机框 / 移动端全屏）
-├── tests/                  # vitest 用例（config / difficulty / patterns / save）
+├── tests/                  # vitest 用例（core 公式 / 存档迁移 / 经济 / 主题 / 周榜）
 ├── scripts/                # Playwright QA 截图脚本
 ├── docs/                   # API / 开发 / 部署文档
 └── vite.config.ts          # base = BASE_PATH ?? '/'
@@ -182,7 +190,7 @@ npm run deploy:cf   # 构建并把 dist/ 发布到 hex-breaker 项目
 
 ## 🧪 测试与质量
 
-- `npm test`：52 个用例覆盖道具解锁表、掉率、武器冷却、炸弹参数、难度公式、阵型生成与存档迁移
+- `npm test`：101 个用例覆盖道具解锁表、掉率、武器冷却、炸弹参数、难度公式（含终局压力）、阵型生成、关卡/BOSS 表、存档 v1–v4 迁移、金币经济、主题状态机与周榜确定性
 - `npm run typecheck`：全量 TypeScript 类型检查（`npm run build` 也会先跑一遍）
 - `scripts/qa-validate*.mjs`：Playwright 端到端截图脚本（依赖外部 Playwright 安装，详见开发文档）
 

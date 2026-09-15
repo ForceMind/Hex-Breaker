@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { COLORS, css, FONT_FAMILY } from '../config/layout';
+import { css, FONT_FAMILY } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { services } from '../services';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -39,6 +40,7 @@ export class Button extends Phaser.GameObjects.Container {
     this.btnW = opts.width ?? 260;
     this.btnH = opts.height ?? 64;
     const variant = opts.variant ?? 'primary';
+    const COLORS = themeColors();
     const fills: Record<ButtonVariant, number> = {
       primary: COLORS.button,
       secondary: COLORS.buttonSecondary,

@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
-import { COLORS } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { TEX } from '../rendering/textures';
 
 /** Banded vertical gradient plus a few slowly drifting soft shapes. */
 export class Background extends Phaser.GameObjects.Container {
   constructor(scene: Phaser.Scene, width: number, height: number) {
     super(scene, 0, 0);
+    const COLORS = themeColors();
     const g = scene.add.graphics();
     const bands = 36;
     const top = Phaser.Display.Color.ValueToColor(COLORS.bgTop);

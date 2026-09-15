@@ -44,6 +44,7 @@ import {
   weaponDuration,
 } from '../../core/config';
 import { calculatePlayerPower, calculateTileDensity, calculateTileHealthRange, difficultyLabel, tileFallSpeed } from '../../core/difficulty';
+import { campaignCoinReward, COINS_DAILY, endlessCoinReward } from '../../core/economy';
 import { formatTimeMs } from '../../core/format';
 import type { LevelDef } from '../../core/levels';
 import { getCampaignLevel } from '../../core/levels';
@@ -51,7 +52,8 @@ import { generatePattern, pickPattern } from '../../core/patterns';
 import { mulberry32 } from '../../core/prng';
 import type { BombType, BulletKind, ItemType, SpecialWeaponType, WeaponState, WeaponType } from '../../core/types';
 import { SPECIAL_WEAPONS } from '../../core/types';
-import { COLORS, css, DEPTH, FONT_FAMILY } from '../config/layout';
+import { css, DEPTH, FONT_FAMILY } from '../config/layout';
+import { themeColors, type ThemeColors } from '../config/themes';
 import { TEX, itemGlyph, tileTexture } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -129,6 +131,21 @@ interface HudCache {
   info: string;
 }
 
+interface BossRec {
+  hp: number;
+  maxHp: number;
+  baseScale: number;
+  view: Phaser.GameObjects.Container;
+  img: Phaser.GameObjects.Image;
+}
+
+/** Boss visuals/behaviour constants (boss levels 10/20/30). */
+const BOSS_Y = 215;
+const BOSS_HALF = 75; // 3x a 50px tile
+const BOSS_TINT = 0xe05252;
+const BOSS_DRIFT_X = 40;
+const ESCORT_WAVE_FRAMES = 240; // ~4 s at 60 fps
+
 /** Scene-start payload: endless (default), campaign level, or daily challenge. */
 export type GameSceneData = { mode: 'endless' } | { mode: 'level'; level: LevelDef } | { mode: 'daily'; level: LevelDef; dateKey: string };
 
@@ -154,6 +171,8 @@ export class GameScene extends BaseScene {
   }
 
   // --- mode ------------------------------------------------------------------
+  /** Palette snapshot taken in init(); scenes re-read it on every create. */
+  private COLORS: ThemeColors = themeColors();
   private mode: GameSceneData['mode'] = 'endless';
   private levelDef: LevelDef | null = null;
   private dateKey = '';
@@ -161,6 +180,8 @@ export class GameScene extends BaseScene {
   private victoryStarted = false;
   private livesLost = 0;
   private elapsedFrames = 0;
+  /** Daily coin reward is earned on today's first clear; a loss doesn't consume it. */
+  private dailyRewardPending = false;
 
   // --- run state -------------------------------------------------------------
   private playing = false;
@@ -196,6 +217,7 @@ export class GameScene extends BaseScene {
   private items: ItemRec[] = [];
   private bombs: BombRec[] = [];
   private boomerangs: BoomerangRec[] = [];
+  private boss: BossRec | null = null;
   private nextTileId = 1;
 
   // --- views -----------------------------------------------------------------
@@ -232,11 +254,13 @@ export class GameScene extends BaseScene {
 
   override init(data?: GameSceneData): void {
     super.init(data);
+    this.COLORS = themeColors();
     const d: GameSceneData = data ?? { mode: 'endless' };
     this.runData = d;
     this.mode = d.mode;
     this.levelDef = d.mode === 'endless' ? null : d.level;
     this.dateKey = d.mode === 'daily' ? d.dateKey : '';
+    this.dailyRewardPending = d.mode === 'daily' && this.svc.save.get().daily.lastPlayedDate !== d.dateKey;
   }
 
   create(): void {
@@ -247,7 +271,8 @@ export class GameScene extends BaseScene {
     this.resetRun();
     this.buildViews();
     this.bindInput();
-    this.spawnInitialRows();
+    if (this.levelDef?.boss) this.spawnBoss(this.levelDef.boss.hp);
+    else this.spawnInitialRows();
     this.playing = true;
   }
 
@@ -298,6 +323,7 @@ export class GameScene extends BaseScene {
     this.items = [];
     this.bombs = [];
     this.boomerangs = [];
+    this.boss = null;
     this.nextTileId = 1;
   }
 
@@ -324,7 +350,7 @@ export class GameScene extends BaseScene {
       alpha: { start: 0.9, end: 0 },
       lifespan: 420,
       gravityY: 220,
-      tint: [COLORS.tile, 0xffffff, COLORS.tileStroke],
+      tint: [this.COLORS.tile, 0xffffff, this.COLORS.tileStroke],
       emitting: false,
     });
     this.shatter.setDepth(DEPTH.effects);
@@ -337,7 +363,7 @@ export class GameScene extends BaseScene {
       rotate: { min: 0, max: 360 },
       lifespan: { min: 300, max: 600 },
       gravityY: 200,
-      tint: [0xffffff, COLORS.tile, COLORS.accent, 0xffd166],
+      tint: [0xffffff, this.COLORS.tile, this.COLORS.accent, 0xffd166],
       emitting: false,
     });
     this.sparks.setDepth(DEPTH.effects);
@@ -362,7 +388,7 @@ export class GameScene extends BaseScene {
       rotate: { min: 0, max: 360 },
       lifespan: 2400,
       gravityY: 120,
-      tint: [COLORS.accent, COLORS.tile, 0xffb703, 0xff6699, 0xffffff],
+      tint: [this.COLORS.accent, this.COLORS.tile, 0xffb703, 0xff6699, 0xffffff],
       frequency: 30,
       emitting: false,
     });
@@ -379,14 +405,14 @@ export class GameScene extends BaseScene {
     // from the top pass underneath it instead of overlapping the HUD text.
     const bandH = 118;
     const band = this.add.graphics().setDepth(DEPTH.hud - 1);
-    const bandTop = Phaser.Display.Color.ValueToColor(COLORS.bgTop);
-    const bandBottom = Phaser.Display.Color.ValueToColor(COLORS.bgBottom);
+    const bandTop = Phaser.Display.Color.ValueToColor(this.COLORS.bgTop);
+    const bandBottom = Phaser.Display.Color.ValueToColor(this.COLORS.bgBottom);
     for (let i = 0; i < bandH; i += 4) {
       const c = Phaser.Display.Color.Interpolate.ColorWithColor(bandTop, bandBottom, this.H, i);
       band.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
       band.fillRect(0, i, this.W, 4);
     }
-    band.fillStyle(COLORS.textPrimary, 0.08);
+    band.fillStyle(this.COLORS.textPrimary, 0.08);
     band.fillRect(0, bandH - 2, this.W, 2);
 
     // HUD: capsule chips for score / level, merged info line below them.
@@ -395,7 +421,7 @@ export class GameScene extends BaseScene {
     this.scoreChipT = this.text(30, 30, '', { size: 18, bold: true, align: 'left' }).setDepth(hudDepth);
     this.levelChipG = this.add.graphics().setDepth(hudDepth);
     this.levelChipT = this.text(28, 66, '', { size: 14, bold: true, align: 'left' }).setDepth(hudDepth);
-    this.hudInfo = this.text(20, 100, '', { size: 12, color: COLORS.textSecondary, align: 'left' }).setDepth(hudDepth);
+    this.hudInfo = this.text(20, 100, '', { size: 12, color: this.COLORS.textSecondary, align: 'left' }).setDepth(hudDepth);
 
     new Button(this, this.W - 34, 32, {
       label: '❚❚',
@@ -410,12 +436,12 @@ export class GameScene extends BaseScene {
     // Level/daily modes: a slim target-progress bar just under the HUD band.
     if (this.levelDef) {
       this.targetGfx = this.add.graphics().setDepth(hudDepth);
-      this.targetText = this.text(this.W / 2, 143, '', { size: 12, bold: true, color: COLORS.textSecondary }).setDepth(hudDepth);
+      this.targetText = this.text(this.W / 2, 143, '', { size: 12, bold: true, color: this.COLORS.textSecondary }).setDepth(hudDepth);
     }
     for (let i = 0; i < 4; i++) {
       const label = this.text(0, 0, '', { size: 12, bold: true, align: 'left' }).setDepth(hudDepth).setVisible(false);
       label.setStroke('#ffffff', 2);
-      const time = this.text(0, 0, '', { size: 10, color: COLORS.textSecondary, align: 'right' }).setDepth(hudDepth).setVisible(false);
+      const time = this.text(0, 0, '', { size: 10, color: this.COLORS.textSecondary, align: 'right' }).setDepth(hudDepth).setVisible(false);
       time.setStroke('#ffffff', 2);
       this.barLabels.push(label);
       this.barTimes.push(time);
@@ -456,7 +482,7 @@ export class GameScene extends BaseScene {
   // ============================================================================
 
   /** Floating text that pops in, holds, then drifts up and fades. */
-  private popText(x: number, y: number, message: string, size = 26, color: number = COLORS.accent): void {
+  private popText(x: number, y: number, message: string, size = 26, color: number = this.COLORS.accent): void {
     const t = this.add.text(x, y, message, {
       fontFamily: FONT_FAMILY,
       fontSize: `${size}px`,
@@ -503,6 +529,7 @@ export class GameScene extends BaseScene {
   /** Row generation driven by the topmost tile position, as in the original. */
   private maintainRows(): void {
     if (this.victoryStarted) return; // board is being cleared for the finale
+    if (this.levelDef?.boss) return; // boss levels spawn escort waves instead
     let topMostY = this.H;
     let hasActive = false;
     for (const t of this.tiles) {
@@ -553,7 +580,7 @@ export class GameScene extends BaseScene {
   private spawnTile(cx: number, cy: number, health: number, popDelay = 0): void {
     // soft shadow under the tile -> the stack reads as floating
     const shadow = this.add.image(0, 5, TEX.softCircle).setTint(0x9dbad8).setAlpha(0.18).setScale((TILE_SIZE + 10) / 256);
-    const img = this.add.image(0, 0, tileTexture(health)).setTint(COLORS.tile);
+    const img = this.add.image(0, 0, tileTexture(health)).setTint(this.COLORS.tile);
     img.setDisplaySize(TILE_SIZE + 8, TILE_SIZE + 8);
     // baked glaze flake overlaid on the tinted face (white, not tinted)
     const glaze = this.add.image(0, 0, TEX.tileHighlight).setDisplaySize(TILE_SIZE + 8, TILE_SIZE + 8);
@@ -609,7 +636,7 @@ export class GameScene extends BaseScene {
       // brief white flash on the face
       t.img.setTintFill(0xffffff);
       this.time.delayedCall(80, () => {
-        if (t.img.scene) t.img.setTint(COLORS.tile);
+        if (t.img.scene) t.img.setTint(this.COLORS.tile);
       });
       return false;
     }
@@ -635,7 +662,7 @@ export class GameScene extends BaseScene {
       this.level += 1;
       this.gameSpeed += SPEED_PER_LEVEL;
       this.svc.audio.levelup();
-      this.popText(this.W / 2, this.H * 0.4, `等级 ${this.level}`, 26, COLORS.accent);
+      this.popText(this.W / 2, this.H * 0.4, `等级 ${this.level}`, 26, this.COLORS.accent);
       this.sparks.explode(8, this.W / 2, this.H * 0.4);
     }
 
@@ -646,10 +673,90 @@ export class GameScene extends BaseScene {
       if (pick) this.spawnItem(t.cx, t.cy, pick);
     }
 
-    // Win condition for level/daily runs.
-    if (this.levelDef && !this.victoryStarted && this.score >= this.levelDef.targetKills) {
+    // Win condition for level/daily runs (boss levels end via bossDestroyed).
+    if (this.levelDef && !this.levelDef.boss && !this.victoryStarted && this.score >= this.levelDef.targetKills) {
       this.startVictory();
     }
+  }
+
+  // ============================================================================
+  // boss (campaign levels 10/20/30)
+  // ============================================================================
+
+  /**
+   * A 3x octagon hovering under the HUD band, drifting +-40 px sideways on a
+   * Sine loop. It never falls; every ~4 s it spits a wave of escort tiles.
+   */
+  private spawnBoss(hp: number): void {
+    const shadow = this.add.image(0, 8, TEX.softCircle).setTint(0x9dbad8).setAlpha(0.2).setScale((BOSS_HALF * 2 + 20) / 256);
+    const img = this.add.image(0, 0, tileTexture(8)).setTint(BOSS_TINT).setDisplaySize(BOSS_HALF * 2, BOSS_HALF * 2);
+    const glaze = this.add.image(0, 0, TEX.tileHighlight).setDisplaySize(BOSS_HALF * 2, BOSS_HALF * 2);
+    const label = this.add
+      .text(0, -6, 'BOSS', {
+        fontFamily: FONT_FAMILY,
+        fontSize: '22px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        resolution: this.dpr,
+      })
+      .setOrigin(0.5);
+    const view = this.add.container(this.W / 2, BOSS_Y, [shadow, img, glaze, label]).setDepth(DEPTH.tiles);
+    view.setScale(0.4);
+    this.tweens.add({ targets: view, scaleX: 1, scaleY: 1, duration: 320, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: view, x: this.W / 2 + BOSS_DRIFT_X, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 320 });
+    this.boss = { hp, maxHp: hp, baseScale: img.scaleX, view, img };
+    this.refreshTargetBar();
+  }
+
+  /** 5-9 escort tiles fanning out from under the boss, with a pop-in. */
+  private spawnEscortWave(): void {
+    const boss = this.boss;
+    if (!boss) return;
+    const count = 5 + Math.floor(this.rng() * 5);
+    const healthRange = calculateTileHealthRange(this.playerPower(), this.difficultyLevel());
+    const baseY = BOSS_Y + BOSS_HALF + TILE_SIZE / 2 + 8;
+    for (let i = 0; i < count; i++) {
+      const spread = (i - (count - 1) / 2) * (TILE_SPACING + 6) + (this.rng() - 0.5) * 24;
+      const cx = Phaser.Math.Clamp(boss.view.x + spread, TILE_SIZE / 2 + 4, this.W - TILE_SIZE / 2 - 4);
+      const health = Math.floor(this.rng() * (healthRange.max - healthRange.min + 1)) + healthRange.min;
+      this.spawnTile(cx, baseY, health, i * 35);
+    }
+  }
+
+  /** Bullet damage to the boss: white flash pulse, bar update, death check. */
+  private damageBoss(amount: number): void {
+    const boss = this.boss;
+    if (!boss || this.victoryStarted) return;
+    boss.hp -= amount;
+    boss.img.setTintFill(0xffffff);
+    this.time.delayedCall(80, () => {
+      if (boss.img.scene && this.boss === boss) boss.img.setTint(BOSS_TINT);
+    });
+    // Hit pulse on the face image only — the container carries the drift tween.
+    this.tweens.killTweensOf(boss.img);
+    boss.img.setScale(boss.baseScale);
+    this.tweens.add({ targets: boss.img, scaleX: boss.baseScale * 1.05, scaleY: boss.baseScale * 1.05, duration: 60, yoyo: true, ease: 'Quad.easeOut' });
+    this.refreshTargetBar();
+    if (boss.hp <= 0) this.bossDestroyed();
+  }
+
+  private bossDestroyed(): void {
+    const boss = this.boss;
+    if (!boss) return;
+    this.boss = null;
+    const { x, y } = boss.view;
+    boss.view.destroy();
+    // Big send-off: triple shock ring, heavy sparks, 200 ms shake.
+    this.shockwave(x, y, 2.4, 320, 0xffffff);
+    this.time.delayedCall(90, () => this.shockwave(x, y, 1.8, 300, BOSS_TINT));
+    this.time.delayedCall(180, () => this.shockwave(x, y, 1.2, 280, 0xffb703));
+    this.shatter.explode(30, x, y);
+    this.sparks.explode(40, x, y);
+    this.cameras.main.shake(200, 0.01);
+    this.svc.audio.explode();
+    this.svc.vibration.explode();
+    this.refreshTargetBar();
+    this.startVictory();
   }
 
   // ============================================================================
@@ -1071,6 +1178,10 @@ export class GameScene extends BaseScene {
   override update(): void {
     if (!this.playing || this.paused) return;
     this.elapsedFrames++;
+    // Boss levels: an escort wave every ~4 s until the boss goes down.
+    if (this.boss && !this.victoryStarted && this.elapsedFrames % ESCORT_WAVE_FRAMES === 0) {
+      this.spawnEscortWave();
+    }
 
     this.handleInput();
     this.updatePlayerState();
@@ -1320,6 +1431,21 @@ export class GameScene extends BaseScene {
           if (!b.active) break;
         }
       }
+      // Boss hit: same radius rule, consumed unless piercing (same as tiles).
+      const boss = this.boss;
+      if (b.active && boss && !this.victoryStarted) {
+        const dx = b.x - boss.view.x;
+        const dy = b.y - boss.view.y;
+        if (Math.sqrt(dx * dx + dy * dy) < b.radius + BOSS_HALF) {
+          if (b.piercing && b.hitCount < b.maxHits) {
+            b.hitCount++;
+          } else {
+            b.active = false;
+            b.view.destroy();
+          }
+          this.damageBoss(b.damage);
+        }
+      }
     }
   }
 
@@ -1370,11 +1496,9 @@ export class GameScene extends BaseScene {
     }
   }
 
-  /** Slim progress bar + 「目标 x/y」 caption under the HUD band. */
+  /** Slim progress bar under the HUD band: target counter, or the boss HP bar. */
   private refreshTargetBar(): void {
     if (!this.targetGfx || !this.levelDef) return;
-    const target = this.levelDef.targetKills;
-    const progress = Math.min(1, this.score / target);
     const x = 16;
     const w = this.W - 32;
     const g = this.targetGfx;
@@ -1382,19 +1506,33 @@ export class GameScene extends BaseScene {
     g.fillStyle(0xffffff, 0.8);
     g.fillRoundedRect(x, 122, w, 10, 5);
     const inset = 2;
-    const innerW = (w - inset * 2) * progress;
-    if (innerW >= 6) {
-      g.fillStyle(COLORS.accent, 0.95);
-      g.fillRoundedRect(x + inset, 122 + inset, innerW, 6, 3);
+    if (this.levelDef.boss) {
+      const maxHp = this.boss?.maxHp ?? this.levelDef.boss.hp;
+      const hp = this.boss ? Math.max(0, this.boss.hp) : 0; // null == defeated
+      const progress = Math.max(0, hp / maxHp);
+      const innerW = (w - inset * 2) * progress;
+      if (innerW >= 6) {
+        g.fillStyle(this.COLORS.danger, 0.95);
+        g.fillRoundedRect(x + inset, 122 + inset, innerW, 6, 3);
+      }
+      this.targetText?.setText(`BOSS ${hp}/${maxHp}`);
+    } else {
+      const target = this.levelDef.targetKills;
+      const progress = Math.min(1, this.score / target);
+      const innerW = (w - inset * 2) * progress;
+      if (innerW >= 6) {
+        g.fillStyle(this.COLORS.accent, 0.95);
+        g.fillRoundedRect(x + inset, 122 + inset, innerW, 6, 3);
+      }
+      this.targetText?.setText(`目标 ${Math.min(this.score, target)}/${target}`);
     }
-    this.targetText?.setText(`目标 ${Math.min(this.score, target)}/${target}`);
   }
 
   private refreshHearts(): void {
     for (const h of this.hearts) h.destroy();
     this.hearts = [];
     for (let i = 0; i < this.lives; i++) {
-      const heart = this.add.image(this.W - 24 - i * 26, 92, TEX.heart).setTint(0xff5577).setScale(0.32).setDepth(DEPTH.hud);
+      const heart = this.add.image(this.W - 24 - i * 26, 92, TEX.heart).setTint(this.COLORS.heart).setScale(0.32).setDepth(DEPTH.hud);
       this.hearts.push(heart);
     }
   }
@@ -1475,13 +1613,13 @@ export class GameScene extends BaseScene {
   private showPauseOverlay(): void {
     this.pauseLayer?.destroy();
     const layer = this.add.container(0, 0).setDepth(DEPTH.modal);
-    const shade = this.add.rectangle(this.W / 2, this.H / 2, this.W, this.H, COLORS.overlay, 0.55).setInteractive();
+    const shade = this.add.rectangle(this.W / 2, this.H / 2, this.W, this.H, this.COLORS.overlay, 0.55).setInteractive();
     layer.add(shade);
     const panel = this.add.container(this.W / 2, this.H / 2);
     const g = this.add.graphics();
     g.fillStyle(0x000000, 0.25);
     g.fillRoundedRect(-180, -150, 360, 320, 30);
-    g.fillStyle(COLORS.panel, 1);
+    g.fillStyle(this.COLORS.panel, 1);
     g.fillRoundedRect(-180, -160, 360, 320, 30);
     g.lineStyle(2, 0xffffff, 0.35);
     g.strokeRoundedRect(-180, -160, 360, 320, 30);
@@ -1560,20 +1698,31 @@ export class GameScene extends BaseScene {
     if (!def) return;
     const timeMs = this.elapsedMs();
     const stars = this.starCount();
-    if (this.mode === 'level') this.svc.save.recordCampaignResult(def.id, stars, timeMs);
-    else if (this.mode === 'daily') this.svc.save.recordDailyResult(this.dateKey, stars, timeMs);
+    // Coins: campaign pays 30 on first clear / 10 on replays; daily pays 20 on
+    // today's first clear (pending flag captured at run start, so a failed
+    // attempt earlier today doesn't consume it).
+    let coins = 0;
+    if (this.mode === 'level') {
+      const firstClear = !this.svc.save.get().campaign.records[def.id];
+      coins = campaignCoinReward(firstClear);
+      this.svc.save.recordCampaignResult(def.id, stars, timeMs);
+    } else if (this.mode === 'daily') {
+      coins = this.dailyRewardPending ? COINS_DAILY : 0;
+      this.svc.save.recordDailyResult(this.dateKey, stars, timeMs);
+    }
+    if (coins > 0) this.svc.save.addCoins(coins);
     this.finalized = true;
 
     const hasNext = this.mode === 'level' && def.id < 30;
     const modal = new Modal(this, this.W, this.H, {
       width: 400,
-      height: 480,
+      height: 500,
       title: this.mode === 'level' ? `关卡 ${def.id} 完成！` : '每日挑战完成！',
     });
 
     // Three stars popping in one by one (Arrow Flow rhythm: 250 + i*260 ms,
     // scale 0 -> 1, 320 ms Back.easeOut); unearned stars stay dim.
-    const row = this.add.container(0, -112);
+    const row = this.add.container(0, -122);
     modal.panel.add(row);
     for (let i = 0; i < 3; i++) {
       const star = this.add.image((i - 1) * 84, 0, TEX.glyphStar).setTint(i < stars ? 0xffb703 : 0xc9d9e8);
@@ -1585,32 +1734,33 @@ export class GameScene extends BaseScene {
       if (i < stars) this.time.delayedCall(250 + i * 260, () => this.svc.audio.pickup());
     }
 
-    modal.panel.add(this.text(0, -36, `用时 ${formatTimeMs(timeMs)} · 消灭 ${this.score}`, { size: 17, bold: true }));
+    modal.panel.add(this.text(0, -48, `用时 ${formatTimeMs(timeMs)} · 消灭 ${this.score}`, { size: 17, bold: true }));
     modal.panel.add(
-      this.text(0, -6, stars === 3 ? '完美通关，一命未失！' : stars === 2 ? '仅失一命，表现出色！' : '通关成功，试试无伤挑战！', {
+      this.text(0, -16, stars === 3 ? '完美通关，一命未失！' : stars === 2 ? '仅失一命，表现出色！' : '通关成功，试试无伤挑战！', {
         size: 13,
-        color: COLORS.textSecondary,
+        color: this.COLORS.textSecondary,
       }),
     );
+    if (coins > 0) modal.panel.add(this.text(0, 14, `+${coins} 金币`, { size: 16, bold: true, color: 0xcc8800 }));
 
     const buttons: Button[] = [];
     if (hasNext) {
       buttons.push(
-        new Button(this, 0, 62, {
+        new Button(this, 0, 76, {
           label: `下一关 Lv${def.id + 1}`,
           width: 280,
           height: 58,
           onClick: () => this.go('GameScene', { mode: 'level', level: getCampaignLevel(def.id + 1) } satisfies GameSceneData),
         }),
       );
-      buttons.push(new Button(this, 0, 134, { label: '重玩本关', variant: 'secondary', width: 280, height: 52, onClick: () => this.refresh(this.runData) }));
+      buttons.push(new Button(this, 0, 148, { label: '重玩本关', variant: 'secondary', width: 280, height: 52, onClick: () => this.refresh(this.runData) }));
       buttons.push(
-        new Button(this, 0, 200, { label: '返回', variant: 'secondary', width: 280, height: 52, onClick: () => this.go('LevelSelectScene') }),
+        new Button(this, 0, 214, { label: '返回', variant: 'secondary', width: 280, height: 52, onClick: () => this.go('LevelSelectScene') }),
       );
     } else {
-      buttons.push(new Button(this, 0, 86, { label: '再玩一次', width: 280, height: 58, onClick: () => this.refresh(this.runData) }));
+      buttons.push(new Button(this, 0, 100, { label: '再玩一次', width: 280, height: 58, onClick: () => this.refresh(this.runData) }));
       buttons.push(
-        new Button(this, 0, 162, {
+        new Button(this, 0, 172, {
           label: '返回',
           variant: 'secondary',
           width: 280,
@@ -1632,7 +1782,7 @@ export class GameScene extends BaseScene {
     const modal = new Modal(this, this.W, this.H, { width: 400, height: 430, title: '挑战失败' });
     const icon = this.add.container(0, -112);
     const g = this.add.graphics();
-    g.fillStyle(COLORS.danger, 1);
+    g.fillStyle(this.COLORS.danger, 1);
     g.fillCircle(0, 0, 36);
     g.fillStyle(0xffffff, 0.25);
     g.fillCircle(-8, -10, 14);
@@ -1642,7 +1792,7 @@ export class GameScene extends BaseScene {
     modal.panel.add(icon);
 
     modal.panel.add(this.text(0, -42, `进度 ${this.score} / ${this.levelDef?.targetKills ?? 0}`, { size: 22, bold: true }));
-    modal.panel.add(this.text(0, -10, '再接再厉，目标就在前方！', { size: 13, color: COLORS.textSecondary }));
+    modal.panel.add(this.text(0, -10, '再接再厉，目标就在前方！', { size: 13, color: this.COLORS.textSecondary }));
     modal.panel.add([
       new Button(this, 0, 72, { label: '重试', width: 280, height: 58, onClick: () => this.refresh(this.runData) }),
       new Button(this, 0, 146, {
@@ -1659,6 +1809,8 @@ export class GameScene extends BaseScene {
   private endlessGameOver(): void {
     const { newHighScore, newBestLevel } = this.svc.save.recordGameResult(this.score, this.level);
     this.finalized = true;
+    const coins = endlessCoinReward(this.score);
+    if (coins > 0) this.svc.save.addCoins(coins);
     const isRecord = newHighScore || newBestLevel;
     if (isRecord) {
       this.svc.audio.win();
@@ -1684,9 +1836,10 @@ export class GameScene extends BaseScene {
       this.time.delayedCall(1200, () => this.confettiFx.stop());
     }
     modal.panel.add(this.text(0, -62, String(this.score), { size: 44, bold: true }));
-    modal.panel.add(this.text(0, -20, '最终得分', { size: 14, color: COLORS.textSecondary }));
-    modal.panel.add(this.text(0, 24, `等级 Lv${this.level} · 消灭瓦片 ${this.score}`, { size: 15, color: COLORS.textSecondary }));
-    modal.panel.add(this.text(0, 52, `历史最高 ${this.svc.save.get().highScore}`, { size: 13, color: COLORS.textSecondary }));
+    modal.panel.add(this.text(0, -20, '最终得分', { size: 14, color: this.COLORS.textSecondary }));
+    modal.panel.add(this.text(0, 24, `等级 Lv${this.level} · 消灭瓦片 ${this.score}`, { size: 15, color: this.COLORS.textSecondary }));
+    modal.panel.add(this.text(0, 52, `历史最高 ${this.svc.save.get().highScore}`, { size: 13, color: this.COLORS.textSecondary }));
+    if (coins > 0) modal.panel.add(this.text(0, 80, `+${coins} 金币`, { size: 15, bold: true, color: 0xcc8800 }));
     const again = new Button(this, 0, 124, { label: '再来一局', width: 280, height: 62, onClick: () => this.refresh() });
     const home = new Button(this, 0, 200, { label: '返回主页', variant: 'secondary', width: 280, height: 56, onClick: () => this.go('HomeScene') });
     modal.panel.add([again, home]);

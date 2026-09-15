@@ -9,7 +9,7 @@ import { hashString } from './prng';
 export interface LevelDef {
   /** 1..30 for campaign levels, 0 for the daily challenge. */
   id: number;
-  /** Win condition: number of tiles to destroy. */
+  /** Win condition: number of tiles to destroy. Ignored on boss levels. */
   targetKills: number;
   /** Difficulty anchor used as the `level` argument of the health/density/speed formulas. */
   virtualLevel: number;
@@ -17,18 +17,26 @@ export interface LevelDef {
   itemTierCap: number;
   /** Fixed seed feeding mulberry32 for this level's run. */
   seed: number;
+  /** Present on boss levels (10/20/30): destroy the boss to win. */
+  boss?: { hp: number };
 }
 
 export const CAMPAIGN_COUNT = 30;
 
+/** Boss hit points per boss level: L10 / L20 / L30. */
+export const BOSS_HP: Readonly<Record<number, number>> = { 10: 150, 20: 300, 30: 500 };
+
 function campaignLevel(id: number): LevelDef {
-  return {
+  const def: LevelDef = {
     id,
     targetKills: 20 + id * 4, // L1 = 24 … L30 = 140
     virtualLevel: 1 + Math.floor((id - 1) * 0.9), // L30 ≈ 27
     itemTierCap: Math.min(15, 1 + Math.floor(id / 2)), // L1 = 1, L30 = 15
     seed: id * 7919,
   };
+  const bossHp = BOSS_HP[id];
+  if (bossHp !== undefined) def.boss = { hp: bossHp };
+  return def;
 }
 
 export const CAMPAIGN_LEVELS: readonly LevelDef[] = Array.from({ length: CAMPAIGN_COUNT }, (_, i) => campaignLevel(i + 1));

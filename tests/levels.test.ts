@@ -31,6 +31,19 @@ describe('CAMPAIGN_LEVELS', () => {
     expect(getCampaignLevel(99).id).toBe(30);
     expect(getCampaignLevel(12).id).toBe(12);
   });
+
+  it('marks levels 10/20/30 as boss levels with increasing hp', () => {
+    const bosses = CAMPAIGN_LEVELS.filter((l) => l.boss);
+    expect(bosses.map((l) => l.id)).toEqual([10, 20, 30]);
+    expect(bosses[0]?.boss?.hp).toBe(150);
+    expect(bosses[1]?.boss?.hp).toBe(300);
+    expect(bosses[2]?.boss?.hp).toBe(500);
+    // hp strictly increases, and non-boss levels carry no boss field
+    expect(bosses[0]!.boss!.hp).toBeLessThan(bosses[1]!.boss!.hp);
+    expect(bosses[1]!.boss!.hp).toBeLessThan(bosses[2]!.boss!.hp);
+    expect(CAMPAIGN_LEVELS[0]?.boss).toBeUndefined();
+    expect(dailyLevel('2026-04-09').boss).toBeUndefined();
+  });
 });
 
 describe('dailyLevel', () => {

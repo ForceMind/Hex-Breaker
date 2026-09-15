@@ -23,24 +23,11 @@ export const DEPTH = {
 /**
  * Single fixed palette: a bright, light-blue look carried over from the
  * original canvas demo, over a deep-slate page backdrop.
+ *
+ * @deprecated colours now come from themeColors() in ./themes; this constant
+ * only remains as the compile-time shape reference.
  */
-export const COLORS = {
-  bgTop: 0xe8f4fd,
-  bgBottom: 0xc4e2f8,
-  decor: 0x7ec3ee,
-  textPrimary: 0x17364f,
-  textSecondary: 0x51708c,
-  button: 0x2f9be8,
-  buttonText: 0xffffff,
-  buttonSecondary: 0xffffff,
-  panel: 0xffffff,
-  panelText: 0x17364f,
-  overlay: 0x0b1d33,
-  accent: 0x2f9be8,
-  danger: 0xe05252,
-  tile: 0x87ceeb,
-  tileStroke: 0x4682b4,
-} as const;
+export type { ThemeColors } from './themes';
 
 /** Phaser text styles need a css colour string. */
 export function css(color: number): string {

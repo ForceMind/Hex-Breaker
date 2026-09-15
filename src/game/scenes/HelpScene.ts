@@ -1,4 +1,4 @@
-import { COLORS } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { Button } from '../ui/Button';
 import { BaseScene } from './BaseScene';
 
@@ -25,6 +25,18 @@ const SECTIONS: Section[] = [
     body: '炸弹 5 种：普通 / 大型 / 斜射 / 横向 / 线性，范围随类型变化。\n回旋镖：弧线飞出，击杀后穿透直飞，返程变绿，靠近可接住重新抛出。\n护盾挡一次撞击；强化护盾持续 10 秒。\n永久增益：双子弹 / 加速 / 连射 / 穿透 / 磁力 / 大弹 / 持久 / 生命+1，15 级前随等级逐步解锁。',
   },
   {
+    title: 'BOSS 关',
+    body: '第 10 / 20 / 30 关是 BOSS 关：击败顶部的大号红色 BOSS 即可获胜（不再要求消灭数量）。\nBOSS 不会下落，每隔约 4 秒喷出一波护卫瓦片；子弹命中 BOSS 扣血，顶部红条是它的血量。',
+  },
+  {
+    title: '金币与主题',
+    body: '金币：关卡首通 +30、重复通关 +10，每日挑战首次通关 +20，无尽模式按得分的 1/10 结算（单局上限 50）。\n主页「主题」里可用金币解锁森林 / 落日 / 霓虹皮肤，解锁后全场景配色即时生效。',
+  },
+  {
+    title: '排行榜',
+    body: '主页「排行」查看无尽模式本周榜：100 名模拟玩家的成绩由本周种子决定，人人相同。\n榜单每周一 0 点（UTC）重置，以你的无尽最高分参与排名。',
+  },
+  {
     title: '难度系统',
     body: '摧毁 8 块瓦片升 1 级，瓦片流速随等级与战力提升。\n战力由武器等级与永久增益计算，战力越高瓦片越密、血量越厚。\n3 级起出现 13 种行阵型（走廊 / 墙壁 / 菱形 / 波浪……）。',
   },
@@ -39,6 +51,7 @@ export class HelpScene extends BaseScene {
   create(): void {
     this.addBackground();
     this.fadeIn();
+    const COLORS = themeColors();
 
     const cx = this.W / 2;
     this.text(cx, 66, '玩法说明', { size: 34, bold: true });

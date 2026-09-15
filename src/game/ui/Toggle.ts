@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { services } from '../services';
 
 export interface ToggleOptions {
@@ -36,7 +36,7 @@ export class Toggle extends Phaser.GameObjects.Container {
 
   private redraw(animate: boolean): void {
     this.track.clear();
-    this.track.fillStyle(this.value ? COLORS.accent : 0x9aa5b5, 1);
+    this.track.fillStyle(this.value ? themeColors().accent : 0x9aa5b5, 1);
     this.track.fillRoundedRect(-36, -18, 72, 36, 18);
     const target = this.value ? 18 : -18;
     if (animate) this.scene.tweens.add({ targets: this.knob, x: target, duration: 140, ease: 'Quad.easeOut' });

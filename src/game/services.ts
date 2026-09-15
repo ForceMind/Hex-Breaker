@@ -1,6 +1,7 @@
 import { AudioService } from '../services/audio';
 import { SaveService } from '../services/save';
 import { VibrationService } from '../services/vibration';
+import { setActiveTheme } from './config/themes';
 
 /**
  * Process-wide singletons shared by every scene. Created once in main.ts.
@@ -27,6 +28,7 @@ export function createServices(): Services {
       audio.setSoundEnabled(s.sound);
       audio.setMusicEnabled(s.music);
       vibration.setEnabled(s.vibration);
+      setActiveTheme(save.get().selectedTheme);
     },
   };
   services.applySettings();

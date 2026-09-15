@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { CAMPAIGN_LEVELS, type LevelDef } from '../../core/levels';
-import { COLORS } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { TEX } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { BaseScene } from './BaseScene';
@@ -24,6 +24,7 @@ export class LevelSelectScene extends BaseScene {
   create(): void {
     this.addBackground();
     this.fadeIn();
+    const COLORS = themeColors();
 
     const cx = this.W / 2;
     this.text(cx, 62, '选择关卡', { size: 34, bold: true });
@@ -53,12 +54,14 @@ export class LevelSelectScene extends BaseScene {
   }
 
   private buildCard(x: number, y: number, level: LevelDef, unlocked: boolean, stars: number): Phaser.GameObjects.Container {
+    const COLORS = themeColors();
+    const isBoss = level.boss !== undefined;
     const card = this.add.container(x, y);
     const g = this.add.graphics();
-    // drop shadow (y + 4) + face
+    // drop shadow (y + 4) + face; boss levels get an accent face.
     g.fillStyle(0x000000, 0.12);
     g.fillRoundedRect(-CARD_W / 2, -CARD_H / 2 + 4, CARD_W, CARD_H, 16);
-    g.fillStyle(0xffffff, unlocked ? 0.92 : 0.7);
+    g.fillStyle(isBoss ? COLORS.accent : 0xffffff, unlocked ? (isBoss ? 1 : 0.92) : 0.7);
     g.fillRoundedRect(-CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H, 16);
     if (stars > 0) {
       // cleared: gold frame
@@ -67,14 +70,24 @@ export class LevelSelectScene extends BaseScene {
     }
     card.add(g);
 
-    card.add(this.text(0, -16, String(level.id), { size: 20, bold: true }));
+    card.add(this.text(0, -16, String(level.id), { size: 20, bold: true, color: isBoss ? 0xffffff : COLORS.textPrimary }));
+
+    if (isBoss) {
+      // corner badge
+      const badge = this.add.container(CARD_W / 2 - 24, -CARD_H / 2 + 12);
+      const bg = this.add.graphics();
+      bg.fillStyle(0xb02323, 1);
+      bg.fillRoundedRect(-22, -9, 44, 18, 9);
+      badge.add([bg, this.text(0, 0, 'BOSS', { size: 10, bold: true, color: 0xffffff })]);
+      card.add(badge);
+    }
 
     if (unlocked) {
       for (let s = 0; s < 3; s++) {
         const star = this.add.image((s - 1) * 24, 16, TEX.glyphStar);
         star.setDisplaySize(18, 18);
         if (s < stars) star.setTint(0xffb703);
-        else star.setTint(0x17364f).setAlpha(0.15);
+        else star.setTint(isBoss ? 0xffffff : 0x17364f).setAlpha(isBoss ? 0.35 : 0.15);
         card.add(star);
       }
     } else {

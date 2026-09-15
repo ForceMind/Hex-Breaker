@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getCampaignLevel } from '../../core/levels';
-import { COLORS } from '../config/layout';
+import { DEPTH } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { tileTexture } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { BaseScene } from './BaseScene';
@@ -14,10 +15,28 @@ export class HomeScene extends BaseScene {
   create(): void {
     this.addBackground();
     this.fadeIn();
+    const COLORS = themeColors();
 
     const cx = this.W / 2;
     const save = this.svc.save.get();
     const nextLevel = Math.min(save.campaign.unlockedLevel, 30);
+
+    // Coin badge, top-right: gold disc + current balance in a capsule.
+    const badgeText = this.text(0, 0, String(save.economy.coins), { size: 15, bold: true, align: 'left' });
+    const badgeW = badgeText.width + 56;
+    const badge = this.add.container(this.W - 16 - badgeW, 16);
+    const bg = this.add.graphics();
+    bg.fillStyle(0x000000, 0.12);
+    bg.fillRoundedRect(0, 3, badgeW, 34, 17);
+    bg.fillStyle(0xffffff, 0.88);
+    bg.fillRoundedRect(0, 0, badgeW, 34, 17);
+    bg.fillStyle(0xffb703, 1);
+    bg.fillCircle(19, 17, 10);
+    bg.fillStyle(0xcc8800, 1);
+    bg.fillCircle(19, 17, 5);
+    badgeText.setPosition(36, 17);
+    badge.add([bg, badgeText]);
+    badge.setDepth(DEPTH.hud);
 
     // Ambient octagon decorations: different stack thicknesses, low alpha,
     // slow rotate + drift, looping forever.
@@ -85,7 +104,7 @@ export class HomeScene extends BaseScene {
       height: 60,
       onClick: () => this.go('GameScene', { mode: 'endless' }),
     });
-    const helpBtn = new Button(this, cx - 76, startY + 246, {
+    const helpBtn = new Button(this, cx - 76, startY + 300, {
       label: '玩法说明',
       variant: 'ghost',
       width: 140,
@@ -93,13 +112,29 @@ export class HomeScene extends BaseScene {
       fontSize: 16,
       onClick: () => this.go('HelpScene'),
     });
-    const settingsBtn = new Button(this, cx + 76, startY + 246, {
+    const settingsBtn = new Button(this, cx + 76, startY + 300, {
       label: '设置',
       variant: 'ghost',
       width: 140,
       height: 46,
       fontSize: 16,
       onClick: () => this.go('SettingsScene'),
+    });
+    const boardBtn = new Button(this, cx - 76, startY + 246, {
+      label: '排行',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => this.go('LeaderboardScene'),
+    });
+    const themeBtn = new Button(this, cx + 76, startY + 246, {
+      label: '主题',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => this.go('ThemeScene'),
     });
 
     const version = this.text(cx, this.H - 36, `v${__APP_VERSION__}`, { size: 13, color: COLORS.textSecondary, alpha: 0.7 });
@@ -114,6 +149,8 @@ export class HomeScene extends BaseScene {
       selectBtn,
       dailyBtn,
       endlessBtn,
+      boardBtn,
+      themeBtn,
       helpBtn,
       settingsBtn,
       version,

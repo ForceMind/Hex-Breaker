@@ -1,8 +1,10 @@
 import type Phaser from 'phaser';
-import { COLORS, css, DEPTH, FONT_FAMILY } from '../config/layout';
+import { css, DEPTH, FONT_FAMILY } from '../config/layout';
+import { themeColors } from '../config/themes';
 
 /** Short transient message; a scene keeps at most one visible at a time. */
 export function showToast(scene: Phaser.Scene, x: number, y: number, message: string, duration = 1400): void {
+  const COLORS = themeColors();
   const dpr = (scene.registry.get('dpr') as number | undefined) ?? 1;
   const existing = scene.children.getByName('toast');
   existing?.destroy();

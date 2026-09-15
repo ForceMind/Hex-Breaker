@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { formatTimeMs } from '../../core/format';
 import { dailyLevel, utcDateKey } from '../../core/levels';
-import { COLORS } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { TEX } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { BaseScene } from './BaseScene';
@@ -18,6 +18,7 @@ export class DailyScene extends BaseScene {
   create(): void {
     this.addBackground();
     this.fadeIn();
+    const COLORS = themeColors();
 
     const cx = this.W / 2;
     this.text(cx, 62, '每日挑战', { size: 34, bold: true });

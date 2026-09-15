@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { COLORS, css, DEPTH, DESIGN_WIDTH, FONT_FAMILY, MIN_DESIGN_HEIGHT } from '../config/layout';
+import { css, DEPTH, DESIGN_WIDTH, FONT_FAMILY, MIN_DESIGN_HEIGHT } from '../config/layout';
+import { themeColors } from '../config/themes';
 import { ensureTextures } from '../rendering/textures';
 import { services } from '../services';
 import type { Services } from '../services';
@@ -78,7 +79,7 @@ export abstract class BaseScene extends Phaser.Scene {
     const style: Phaser.Types.GameObjects.Text.TextStyle = {
       fontFamily: FONT_FAMILY,
       fontSize: `${opts.size ?? 20}px`,
-      color: css(opts.color ?? COLORS.textPrimary),
+      color: css(opts.color ?? themeColors().textPrimary),
       fontStyle: opts.bold ? 'bold' : 'normal',
       align: opts.align ?? 'center',
       resolution: this.dpr,

@@ -5,7 +5,7 @@
 import { previousDateKey } from '../core/levels';
 
 export const SAVE_KEY = 'hex-breaker:save';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export interface Settings {
   music: boolean;
@@ -32,6 +32,13 @@ export interface DailyProgress {
   bestTimeMs: number;
 }
 
+export interface Economy {
+  coins: number;
+  totalEarned: number;
+}
+
+export const DEFAULT_THEME = 'sky';
+
 export interface SaveData {
   version: number;
   highScore: number;
@@ -41,6 +48,9 @@ export interface SaveData {
   settings: Settings;
   campaign: CampaignProgress;
   daily: DailyProgress;
+  economy: Economy;
+  selectedTheme: string;
+  unlockedThemes: string[];
 }
 
 export interface StorageLike {
@@ -59,6 +69,9 @@ export function defaultSave(): SaveData {
     settings: { music: true, sound: true, vibration: true },
     campaign: { unlockedLevel: 1, records: {} },
     daily: { lastPlayedDate: '', streak: 0, bestStars: 0, bestTimeMs: 0 },
+    economy: { coins: 0, totalEarned: 0 },
+    selectedTheme: DEFAULT_THEME,
+    unlockedThemes: [DEFAULT_THEME],
   };
 }
 
@@ -99,6 +112,17 @@ export function migrate(raw: unknown): SaveData {
     d.daily.bestStars = int(raw.daily.bestStars, 0, 0, 3);
     d.daily.bestTimeMs = int(raw.daily.bestTimeMs, 0, 0);
   }
+  // v4 additions; absent in v1-v3 saves, in which case defaults are kept.
+  if (isObj(raw.economy)) {
+    d.economy.coins = int(raw.economy.coins, 0, 0);
+    d.economy.totalEarned = int(raw.economy.totalEarned, 0, 0);
+  }
+  if (Array.isArray(raw.unlockedThemes)) {
+    d.unlockedThemes = [...new Set(raw.unlockedThemes.filter((t): t is string => typeof t === 'string'))];
+  }
+  if (!d.unlockedThemes.includes(DEFAULT_THEME)) d.unlockedThemes.unshift(DEFAULT_THEME);
+  d.selectedTheme = typeof raw.selectedTheme === 'string' ? raw.selectedTheme : DEFAULT_THEME;
+  if (!d.unlockedThemes.includes(d.selectedTheme)) d.selectedTheme = DEFAULT_THEME;
   d.version = SAVE_VERSION;
   return d;
 }
@@ -110,7 +134,9 @@ export function isValidSave(data: SaveData): boolean {
     data.highScore >= 0 &&
     isObj(data.settings) &&
     isObj(data.campaign) &&
-    isObj(data.daily)
+    isObj(data.daily) &&
+    isObj(data.economy) &&
+    Array.isArray(data.unlockedThemes)
   );
 }
 
@@ -260,5 +286,41 @@ export class SaveService {
     }
     this.save();
     return { improved };
+  }
+
+  /** Grant coins (endless/campaign/daily rewards). */
+  addCoins(amount: number): void {
+    const a = Math.max(0, Math.round(amount));
+    if (a === 0) return;
+    this.data.economy.coins += a;
+    this.data.economy.totalEarned += a;
+    this.save();
+  }
+
+  /** Spend coins; returns false (and changes nothing) when the balance is short. */
+  spendCoins(amount: number): boolean {
+    const a = Math.max(0, Math.round(amount));
+    if (this.data.economy.coins < a) return false;
+    this.data.economy.coins -= a;
+    this.save();
+    return true;
+  }
+
+  /** Mark a theme as owned (idempotent). */
+  unlockTheme(id: string): void {
+    if (!this.data.unlockedThemes.includes(id)) {
+      this.data.unlockedThemes.push(id);
+      this.save();
+    }
+  }
+
+  /** Switch the active theme; rejected (false) when the theme is not owned. */
+  selectTheme(id: string): boolean {
+    if (!this.data.unlockedThemes.includes(id)) return false;
+    if (this.data.selectedTheme !== id) {
+      this.data.selectedTheme = id;
+      this.save();
+    }
+    return true;
   }
 }

@@ -1,0 +1,98 @@
+import { COLORS } from '../config/layout';
+import { Button } from '../ui/Button';
+import { BaseScene } from './BaseScene';
+
+interface Section {
+  title: string;
+  body: string;
+}
+
+const SECTIONS: Section[] = [
+  {
+    title: '操作',
+    body: '← / → 键或手指左右拖动控制方块移动，自动向上射击。\nP 暂停，ESC 返回主页。\n八边形瓦片不断从顶部流下，撞上就会损失生命（共 3 条）。',
+  },
+  {
+    title: '武器（可叠加，最高 Lv5）',
+    body: '冲锋枪：极速连射，Lv3 起双发\n霰弹枪：扇形多发，Lv4 起大型弹\n激光炮：伤害 3，Lv3 起大激光，Lv5 三连发\n散射枪：扇面覆盖，Lv3 起散射更宽',
+  },
+  {
+    title: '道具',
+    body: '炸弹 5 种：普通 / 大型 / 斜射 / 横向 / 线性，范围随类型变化。\n回旋镖：弧线飞出，击杀后穿透直飞，返程变绿，靠近可接住重新抛出。\n护盾挡一次撞击；强化护盾持续 10 秒。\n永久增益：双子弹 / 加速 / 连射 / 穿透 / 磁力 / 大弹 / 持久 / 生命+1，15 级前随等级逐步解锁。',
+  },
+  {
+    title: '难度系统',
+    body: '摧毁 8 块瓦片升 1 级，瓦片流速随等级与战力提升。\n战力由武器等级与永久增益计算，战力越高瓦片越密、血量越厚。\n3 级起出现 13 种行阵型（走廊 / 墙壁 / 菱形 / 波浪……）。',
+  },
+];
+
+/** Scrolling help screen (drag to scroll when content overflows). */
+export class HelpScene extends BaseScene {
+  constructor() {
+    super('HelpScene');
+  }
+
+  create(): void {
+    this.addBackground();
+    this.fadeIn();
+
+    const cx = this.W / 2;
+    this.text(cx, 66, '玩法说明', { size: 34, bold: true });
+
+    // Content sits in one white card (r22, soft shadow).
+    const cardX = 20;
+    const cardY = 104;
+    const cardW = this.W - 40;
+    const cardH = this.H - cardY - 96;
+    const card = this.add.graphics();
+    card.fillStyle(0x000000, 0.12);
+    card.fillRoundedRect(cardX, cardY + 5, cardW, cardH, 22);
+    card.fillStyle(0xffffff, 1);
+    card.fillRoundedRect(cardX, cardY, cardW, cardH, 22);
+
+    const pad = 24;
+    const top = cardY + 26;
+    const bottom = cardY + cardH - 20;
+    const content = this.add.container(0, 0);
+
+    let y = top;
+    for (const s of SECTIONS) {
+      const title = this.text(cardX + pad, y, s.title, { size: 21, bold: true, align: 'left' });
+      content.add(title);
+      y += 34;
+      const body = this.text(cardX + pad, y, s.body, { size: 16, color: COLORS.textSecondary, align: 'left', wrap: cardW - pad * 2, lineSpacing: 8 });
+      body.setOrigin(0, 0);
+      content.add(body);
+      y += body.height + 32;
+    }
+    const contentHeight = y - top;
+    const viewHeight = bottom - top;
+
+    if (contentHeight > viewHeight) {
+      // Drag-to-scroll with a camera masked to the card interior.
+      const cam = this.cameras.main;
+      const maskG = this.make.graphics({ x: 0, y: 0 }, false);
+      maskG.fillRect(cardX + 4, top - 8, cardW - 8, viewHeight + 16);
+      content.setMask(maskG.createGeometryMask());
+      let dragY: number | null = null;
+      let startContentY = 0;
+      const minY = -(contentHeight - viewHeight);
+      this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        dragY = p.y;
+        startContentY = content.y;
+      });
+      this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+        if (dragY === null || !p.isDown) return;
+        content.y = Phaser.Math.Clamp(startContentY + (p.y - dragY) / cam.zoom, minY, 0);
+      });
+      this.input.on('pointerup', () => {
+        dragY = null;
+      });
+      this.text(cx, cardY + cardH - 22, '上下拖动查看更多', { size: 13, color: COLORS.textSecondary, alpha: 0.8 });
+    }
+
+    new Button(this, cx, this.H - 56, { label: '返回', width: 320, height: 60, onClick: () => this.go('HomeScene') });
+
+    this.input.keyboard?.once('keydown-ESC', () => this.go('HomeScene'));
+  }
+}

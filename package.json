@@ -1,0 +1,30 @@
+{
+  "name": "hex-breaker",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "瓦片破坏者 Hex Breaker — Phaser 3 + TypeScript 的 H5 无尽街机射击游戏",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "deploy:cf": "npm run build && wrangler pages deploy dist --project-name hex-breaker --branch main --commit-dirty=true"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.128.0"
+  }
+}

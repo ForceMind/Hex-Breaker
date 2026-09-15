@@ -1,9 +1,7 @@
-import { themeColors, THEME_IDS, playerSpriteKey } from '../config/themes';
+import { ASSET_TEX_FAILED_KEY, isOptionalArtKey, optionalArtManifest } from '../config/assets';
+import { themeColors } from '../config/themes';
 import { ensureTextures, tileTexture } from '../rendering/textures';
 import { BaseScene } from './BaseScene';
-
-/** Registry key holding the list of player-sprite keys that failed to load. */
-export const PLAYER_TEX_FAILED_KEY = 'playerTexFailed';
 
 /**
  * Generates every procedural texture, loads the eight optional player-sprite
@@ -29,14 +27,15 @@ export class BootScene extends BaseScene {
     const hint = this.text(cx, this.H - 140, '正在加载…', { size: 14, color: COLORS.textSecondary }).setAlpha(0);
     this.tweens.add({ targets: hint, alpha: 0.85, duration: 320 });
 
-    // Optional per-theme player art; 404s only grow the failure list.
-    for (const id of THEME_IDS) {
-      this.load.image(playerSpriteKey(id), `assets/player-${id}.png`);
+    // Optional AI art (sprites / tile faces / backgrounds); failures only
+    // grow the per-key failure list, never block the boot.
+    for (const file of optionalArtManifest()) {
+      this.load.image(file.key, file.url);
     }
     this.load.on('loaderror', (file: Phaser.Loader.File) => {
-      if (!file.key.startsWith('player-')) return;
-      const failed = (this.registry.get(PLAYER_TEX_FAILED_KEY) as string[] | undefined) ?? [];
-      this.registry.set(PLAYER_TEX_FAILED_KEY, [...failed, file.key]);
+      if (!isOptionalArtKey(file.key)) return;
+      const failed = (this.registry.get(ASSET_TEX_FAILED_KEY) as string[] | undefined) ?? [];
+      this.registry.set(ASSET_TEX_FAILED_KEY, [...failed, file.key]);
     });
 
     // Hand over once the loader is done AND the 500ms logo beat has played.

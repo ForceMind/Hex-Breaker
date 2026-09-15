@@ -1,5 +1,7 @@
 import { themeColors } from '../config/themes';
+import { canShowInstallEntry } from '../../services/pwa';
 import { Button } from '../ui/Button';
+import { openInstallFlow } from '../ui/installPrompt';
 import { Modal } from '../ui/Modal';
 import { Toggle } from '../ui/Toggle';
 import { showToast } from '../ui/Toast';
@@ -56,7 +58,19 @@ export class SettingsScene extends BaseScene {
       });
     });
 
-    new Button(this, cx, cardY + cardH + 56, {
+    let nextY = cardY + cardH + 56;
+    // PWA install entry: only when this browser can actually offer it.
+    if (canShowInstallEntry()) {
+      new Button(this, cx, nextY, {
+        label: '安装到主屏',
+        width: 280,
+        height: 58,
+        onClick: () => openInstallFlow(this),
+      });
+      nextY += 74;
+    }
+
+    new Button(this, cx, nextY, {
       label: '清除存档',
       variant: 'danger',
       width: 280,

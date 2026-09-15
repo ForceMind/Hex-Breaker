@@ -274,3 +274,23 @@ export function resolvePlayerSprite(themeId: string, available: (key: string) =>
   if (available(fallback)) return fallback;
   return null;
 }
+
+export function themeTileKey(id: string): string {
+  return `tile-${id}`;
+}
+
+export function themeBgKey(id: string): string {
+  return `bg-${id}`;
+}
+
+/** Tile face art for the theme, or null -> full procedural tile rendering. */
+export function resolveThemeTile(themeId: string, available: (key: string) => boolean): string | null {
+  const key = themeTileKey(themeId);
+  return available(key) ? key : null;
+}
+
+/** Background art for the theme, or null -> the procedural gradient. */
+export function resolveThemeBg(themeId: string, available: (key: string) => boolean): string | null {
+  const key = themeBgKey(themeId);
+  return available(key) ? key : null;
+}

@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "瓦片破坏者",
+  "short_name": "瓦片破坏者",
+  "description": "八边形瓦片射击：闯关、每日挑战与无尽模式。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#a9d4f5",
+  "background_color": "#0b1d33",
+  "icons": [
+    { "src": "assets/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

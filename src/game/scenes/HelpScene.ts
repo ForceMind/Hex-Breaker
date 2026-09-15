@@ -1,4 +1,5 @@
-import { themeColors } from '../config/themes';
+import { activeThemeId, themeColors } from '../config/themes';
+import { itemName } from '../../core/itemNames';
 import { Button } from '../ui/Button';
 import { BaseScene } from './BaseScene';
 
@@ -7,7 +8,9 @@ interface Section {
   body: string;
 }
 
-const SECTIONS: Section[] = [
+function buildSections(): Section[] {
+  const n = (t: Parameters<typeof itemName>[1]): string => itemName(activeThemeId(), t);
+  return [
   {
     title: '游戏模式',
     body: '关卡模式：消灭目标数量的瓦片即可获胜，通关解锁下一关（共 30 关）；按损失生命评星——未掉命 3 星，掉 1 命 2 星。\n每日挑战：所有玩家今天面对完全相同的关卡（相同阵型、血量与掉落），无论胜负都算打卡，连续天数会累积。\n无尽模式：瓦片无限流下，冲击最高分；30 级后瓦片血量上限与下落速度持续增长，压力不断升级。',
@@ -18,11 +21,11 @@ const SECTIONS: Section[] = [
   },
   {
     title: '武器（可叠加，最高 Lv5）',
-    body: '冲锋枪：极速连射，Lv3 起双发\n霰弹枪：扇形多发，Lv4 起大型弹\n激光炮：伤害 3，Lv3 起大激光，Lv5 三连发\n散射枪：扇面覆盖，Lv3 起散射更宽',
+    body: `${n('uzi')}：极速连射，Lv3 起双发\n${n('shotgun')}：扇形多发，Lv4 起大型弹\n${n('laser')}：伤害 3，Lv3 起大弹，Lv5 三连发\n${n('spread')}：扇面覆盖，Lv3 起散射更宽`,
   },
   {
     title: '道具',
-    body: '炸弹 5 种：普通 / 大型 / 斜射 / 横向 / 线性，范围随类型变化。\n回旋镖：弧线飞出，击杀后穿透直飞，返程变绿，靠近可接住重新抛出。\n护盾挡一次撞击；强化护盾持续 10 秒。\n永久增益：双子弹 / 加速 / 连射 / 穿透 / 磁力 / 大弹 / 持久 / 生命+1，15 级前随等级逐步解锁。',
+    body: '炸弹 5 种：普通 / 大型 / 斜射 / 横向 / 线性，范围随类型变化。\n回旋镖：弧线飞出，击杀后穿透直飞，返程变绿，靠近可接住重新抛出。\n护盾挡一次撞击；强化护盾持续 10 秒。\n永久增益：双子弹 / 加速 / 连射 / 穿透 / 磁力 / 大弹 / 持久 / 生命+1，15 级前随等级逐步解锁。\n道具名称随皮肤主题变化（同一效果，各皮肤叫法不同）。',
   },
   {
     title: 'BOSS 关',
@@ -40,7 +43,8 @@ const SECTIONS: Section[] = [
     title: '难度系统',
     body: '摧毁 8 块瓦片升 1 级，瓦片流速随等级与战力提升。\n战力由武器等级与永久增益计算，战力越高瓦片越密、血量越厚。\n3 级起出现 13 种行阵型（走廊 / 墙壁 / 菱形 / 波浪……）。',
   },
-];
+  ];
+}
 
 /** Scrolling help screen (drag to scroll when content overflows). */
 export class HelpScene extends BaseScene {
@@ -73,7 +77,7 @@ export class HelpScene extends BaseScene {
     const content = this.add.container(0, 0);
 
     let y = top;
-    for (const s of SECTIONS) {
+    for (const s of buildSections()) {
       const title = this.text(cardX + pad, y, s.title, { size: 21, bold: true, align: 'left' });
       content.add(title);
       y += 34;

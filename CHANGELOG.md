@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本控制](https://semver.org/spec/v2.0.0.html)。
 
+## [2.4.0] - 2026-09-15
+
+### 新增 ✨
+- **PWA 支持**：Web App Manifest（standalone / portrait / 主题色）+ Service Worker 离线壳（带 hash 的产物 cache-first，其余 network-first + 缓存兜底，缓存名随版本滚动）；iOS Safari 弹「分享 → 添加到主屏幕」引导，Android 拦截 beforeinstallprompt 由 UI 触发，微信/QQ/UC 等内嵌浏览器不打扰；设置页新增「安装到主屏」入口，第二次回到主页自动邀请一次（仅一次）
+- **道具按皮肤改名换肤**：8 主题 × 20 道具完整名称表（宇宙/森林/落日/海洋/霓虹/雪地/熔岩全套叫法），拾取飘字、Toast、武器计时条与玩法说明全部跟随当前皮肤；道具盒加主题 accent 描边与 glyph 微染
+- **AI 重绘砖块与背景**：每主题 tile-<id>.png 砖块顶面 + bg-<id>.jpg 竖版背景，BootScene 统一加载逐张容错；砖块 = 深色程序堆叠 + AI 顶面（受击改 alpha 闪烁），背景 = cover 铺图 + 可读性遮罩，缺失时完整回退程序渲染；主题商店卡片预览优先显示背景图
+
 ## [2.3.0] - 2026-09-15
 
 ### 变更 🔧

@@ -4,7 +4,7 @@
 
 ![平台](https://img.shields.io/badge/Platform-Web-brightgreen)
 ![技术栈](https://img.shields.io/badge/Tech-Phaser%203%20%7C%20TypeScript%20%7C%20Vite-blue)
-![版本](https://img.shields.io/badge/Version-2.3.0-orange)
+![版本](https://img.shields.io/badge/Version-2.4.0-orange)
 
 🌐 线上地址：<https://hex-breaker.pages.dev>
 
@@ -23,6 +23,9 @@
 - **金币经济**：通关 / 每日 / 无尽结算产出金币，胜利与结束面板显示入账，主页右上角金币徽章
 - **8 套皮肤主题（角色 + 配套背景）**：天空（拿枪小兵，默认）/ 宇宙（飞船）/ 森林（弓箭游侠）/ 落日（牛仔）/ 海洋（潜水员）/ 霓虹（未来特工）/ 雪地（狙击手）/ 熔岩（战士），金币解锁，切换后角色形象与全场景配色同时生效
 - **模拟周榜**：无尽模式本周排行榜，100 名模拟玩家由周种子幂律生成，每周自动重置
+- **道具按皮肤换肤**：8 主题 × 20 道具独立名称（脉冲机炮 / 连珠弩 / 双持左轮 / 泡泡机关枪……），名称与盒体描边随皮肤变化
+- **AI 砖块与背景**：每主题独立砖块顶面与竖版背景图，缺失时完整回退程序渲染
+- **PWA 可安装**：manifest + Service Worker 离线壳，iOS「添加到主屏幕」引导 / Android 原生安装提示
 - **合成音效 + 震动**：全部音效用 Web Audio 实时合成（无任何音频文件），移动端支持震动反馈
 - **PC / 移动端双适配**：PC 宽屏下呈现居中圆角「手机框」竖屏卡片，移动端全屏沉浸
 
@@ -40,7 +43,7 @@ npm run dev        # 开发服务器（默认 http://localhost:5173）
 ```bash
 npm run build      # 类型检查 + 产物构建到 dist/
 npm run preview    # 本地预览构建产物
-npm test           # 运行 vitest（8 个测试文件，106 个用例）
+npm test           # 运行 vitest（11 个测试文件，121 个用例）
 npm run typecheck  # 仅运行 TypeScript 类型检查
 ```
 
@@ -154,17 +157,20 @@ Hex-Breaker/
 │   │   ├── difficulty.ts   # 战力 / 密度 / 血量 / 速度公式（含 Lv30 后终局压力）
 │   │   ├── levels.ts       # 30 关战役表 / BOSS 关 / 每日挑战种子
 │   │   ├── economy.ts      # 金币产出规则
+│   │   ├── itemNames.ts    # 8 主题 × 20 道具名称表
 │   │   ├── patterns.ts     # 13 种行阵型生成
 │   │   ├── prng.ts         # 可播种随机数（mulberry32 + FNV 字符串 hash）
 │   │   └── types.ts        # 共享类型
 │   ├── services/           # 平台服务（无 Phaser 依赖）
 │   │   ├── save.ts         # localStorage 存档（v4：战役 / 每日 / 金币 / 主题）
+│   │   ├── pwa.ts          # Service Worker 注册 + 安装提示 UA 判定
 │   │   ├── leaderboard.ts  # 无尽周榜（ISO 周种子幂律模拟）
 │   │   ├── audio.ts        # Web Audio 合成音效
 │   │   └── vibration.ts    # 震动封装
 │   ├── game/
 │   │   ├── config/layout.ts    # 设计分辨率 / 深度层
 │   │   ├── config/themes.ts    # 8 套皮肤主题（配色 + 角色 sprite）+ 当前主题
+│   │   ├── config/assets.ts    # 可选 AI 图清单（角色 / 砖块 / 背景）与容错记录
 │   │   ├── scenes/             # Boot / Home / Help / Settings / LevelSelect / Daily / Theme / Leaderboard / Game
 │   │   ├── ui/                 # Button / Modal / Toast / Toggle / Background
 │   │   ├── rendering/textures.ts  # 程序生成贴图
@@ -188,9 +194,18 @@ npm run deploy:cf   # 构建并把 dist/ 发布到 hex-breaker 项目
 
 也支持 GitHub Pages 等子路径静态托管（用 `BASE_PATH` 环境变量覆盖 base）。完整步骤与排错见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
 
+## 📲 安装到主屏（PWA）
+
+游戏是完整 PWA：部署到 HTTPS 后即可「安装」到手机主屏，离线可玩。
+
+- **Android（Chrome/Edge/三星浏览器）**：设置页点「安装到主屏」触发系统安装弹窗；第二次回到主页也会自动邀请一次（仅一次）。
+- **iOS（Safari）**：系统无安装 API，按引导手动操作——分享 → 添加到主屏幕。
+- 微信 / QQ / UC 等内嵌浏览器与已安装的 standalone 模式不会收到任何安装提示。
+- Service Worker 策略：`/assets/` 下带内容 hash 的 JS/CSS 为 cache-first；页面、manifest 与 AI 素材为 network-first + 缓存兜底；缓存名随版本号滚动，旧缓存自动清理。
+
 ## 🧪 测试与质量
 
-- `npm test`：106 个用例覆盖道具解锁表、掉率、武器冷却、炸弹参数、难度公式（含终局压力）、阵型生成、关卡/BOSS 表、存档 v1–v4 迁移、金币经济、主题状态机与周榜确定性
+- `npm test`：121 个用例覆盖道具解锁表、掉率、武器冷却、炸弹参数、难度公式（含终局压力）、阵型生成、关卡/BOSS 表、存档 v1–v4 迁移、金币经济、主题状态机与周榜确定性
 - `npm run typecheck`：全量 TypeScript 类型检查（`npm run build` 也会先跑一遍）
 - `scripts/qa-validate*.mjs`：Playwright 端到端截图脚本（依赖外部 Playwright 安装，详见开发文档）
 

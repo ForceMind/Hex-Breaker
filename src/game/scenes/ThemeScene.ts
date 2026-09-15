@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import { themeColors, setActiveTheme, THEMES, THEME_IDS, type ThemeDef } from '../config/themes';
+import { ASSET_TEX_FAILED_KEY } from '../config/assets';
+import { resolveThemeBg, themeColors, setActiveTheme, THEMES, THEME_IDS, type ThemeDef } from '../config/themes';
 import { tileTexture } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { showToast } from '../ui/Toast';
 import { BaseScene } from './BaseScene';
-import { PLAYER_TEX_FAILED_KEY } from './BootScene';
 
 const CARD_W = 210;
 const CARD_H = 170;
@@ -30,7 +30,7 @@ export class ThemeScene extends BaseScene {
     this.addBackground();
     this.fadeIn();
     const COLORS = themeColors();
-    this.failedSprites = new Set((this.registry.get(PLAYER_TEX_FAILED_KEY) as string[] | undefined) ?? []);
+    this.failedSprites = new Set((this.registry.get(ASSET_TEX_FAILED_KEY) as string[] | undefined) ?? []);
 
     const cx = this.W / 2;
     this.text(cx, 52, '主题皮肤', { size: 32, bold: true });
@@ -84,6 +84,17 @@ export class ThemeScene extends BaseScene {
       g.strokeRoundedRect(-CARD_W / 2 + 1.5, -CARD_H / 2 + 1.5, CARD_W - 3, CARD_H - 3, 17);
     }
     card.add(g);
+
+    // Preview band: the theme's AI backdrop when it exists (cover-cropped,
+    // masked to the rounded card top), else the two-band gradient above.
+    const bgKey = resolveThemeBg(theme.id, (key) => this.textures.exists(key) && !this.failedSprites.has(key));
+    if (bgKey) {
+      const img = this.add.image(x, y - CARD_H / 2 + PREVIEW_H / 2, bgKey);
+      img.setScale(Math.max((CARD_W - 6) / img.width, (PREVIEW_H - 6) / img.height));
+      const maskG = this.make.graphics({ x: 0, y: 0 }, false);
+      maskG.fillRoundedRect(x - CARD_W / 2 + 3, y - CARD_H / 2 + 3, CARD_W - 6, PREVIEW_H - 6, { tl: 15, tr: 15, bl: 0, br: 0 });
+      img.setMask(maskG.createGeometryMask());
+    }
 
     // Character sprite preview; octagon placeholder while the art is missing.
     const hasSprite = this.textures.exists(theme.sprite) && !this.failedSprites.has(theme.sprite);

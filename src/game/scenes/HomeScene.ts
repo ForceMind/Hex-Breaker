@@ -3,6 +3,7 @@ import { getCampaignLevel } from '../../core/levels';
 import { DEPTH } from '../config/layout';
 import { themeColors } from '../config/themes';
 import { tileTexture } from '../rendering/textures';
+import { autoPromptInstallIfDue } from '../ui/installPrompt';
 import { Button } from '../ui/Button';
 import { BaseScene } from './BaseScene';
 
@@ -138,6 +139,8 @@ export class HomeScene extends BaseScene {
     });
 
     const version = this.text(cx, this.H - 36, `v${__APP_VERSION__}`, { size: 13, color: COLORS.textSecondary, alpha: 0.7 });
+
+    autoPromptInstallIfDue(this);
 
     // Entrance: staggered fade + 12px rise into place.
     const entrance: (Phaser.GameObjects.Text | Phaser.GameObjects.Container)[] = [

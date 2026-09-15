@@ -38,7 +38,6 @@ import {
   TILE_SPACING,
   WEAPON_BAR_COLORS,
   WEAPON_MAX_LEVEL,
-  WEAPON_NAMES,
   availableItems,
   weaponCooldown,
   weaponDuration,
@@ -48,18 +47,19 @@ import { campaignCoinReward, COINS_DAILY, endlessCoinReward } from '../../core/e
 import { formatTimeMs } from '../../core/format';
 import type { LevelDef } from '../../core/levels';
 import { getCampaignLevel } from '../../core/levels';
+import { itemName } from '../../core/itemNames';
 import { generatePattern, pickPattern } from '../../core/patterns';
 import { mulberry32 } from '../../core/prng';
 import type { BombType, BulletKind, ItemType, SpecialWeaponType, WeaponState, WeaponType } from '../../core/types';
 import { SPECIAL_WEAPONS } from '../../core/types';
 import { css, DEPTH, FONT_FAMILY } from '../config/layout';
-import { activeThemeId, playerSpriteKey, resolvePlayerSprite, themeColors, type ThemeColors } from '../config/themes';
+import { activeThemeId, playerSpriteKey, resolvePlayerSprite, resolveThemeTile, themeColors, type ThemeColors } from '../config/themes';
 import { TEX, itemGlyph, tileTexture } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { showToast } from '../ui/Toast';
 import { BaseScene } from './BaseScene';
-import { PLAYER_TEX_FAILED_KEY } from './BootScene';
+import { ASSET_TEX_FAILED_KEY } from '../config/assets';
 
 interface TileRec {
   id: number;
@@ -69,7 +69,10 @@ interface TileRec {
   maxHealth: number;
   active: boolean;
   view: Phaser.GameObjects.Container;
+  /** Procedural thickness stack (kept under the AI face as the dark body). */
   img: Phaser.GameObjects.Image;
+  /** AI tile art overlay; null in full-procedural mode. */
+  face: Phaser.GameObjects.Image | null;
   label: Phaser.GameObjects.Text;
 }
 
@@ -173,6 +176,10 @@ export class GameScene extends BaseScene {
   // --- mode ------------------------------------------------------------------
   /** Palette snapshot taken in init(); scenes re-read it on every create. */
   private COLORS: ThemeColors = themeColors();
+  /** Active skin at scene start; drives item names and tile art. */
+  private themeId = 'sky';
+  /** AI tile-face texture for the active theme; null = procedural tiles. */
+  private tileArtKey: string | null = null;
   private mode: GameSceneData['mode'] = 'endless';
   private levelDef: LevelDef | null = null;
   private dateKey = '';
@@ -255,6 +262,7 @@ export class GameScene extends BaseScene {
   override init(data?: GameSceneData): void {
     super.init(data);
     this.COLORS = themeColors();
+    this.themeId = activeThemeId();
     const d: GameSceneData = data ?? { mode: 'endless' };
     this.runData = d;
     this.mode = d.mode;
@@ -334,8 +342,10 @@ export class GameScene extends BaseScene {
     const playerCenterY = this.py + PLAYER_HEIGHT / 2;
     this.playerView = this.add.container(playerCenterX, playerCenterY).setDepth(DEPTH.player);
     const glow = this.add.image(0, 0, TEX.softCircle).setTint(0xffdd00).setAlpha(0.5).setScale(0.5);
-    const failed = new Set((this.registry.get(PLAYER_TEX_FAILED_KEY) as string[] | undefined) ?? []);
-    const spriteKey = resolvePlayerSprite(activeThemeId(), (key) => this.textures.exists(key) && !failed.has(key));
+    const failed = new Set((this.registry.get(ASSET_TEX_FAILED_KEY) as string[] | undefined) ?? []);
+    const artAvailable = (key: string): boolean => this.textures.exists(key) && !failed.has(key);
+    this.tileArtKey = resolveThemeTile(this.themeId, artAvailable);
+    const spriteKey = resolvePlayerSprite(this.themeId, artAvailable);
     const spriteSize = spriteKey === playerSpriteKey('space') ? 60 : 56; // the ship art reads better slightly larger
     const body = spriteKey
       ? this.add.image(0, 0, spriteKey).setDisplaySize(spriteSize, spriteSize)
@@ -583,10 +593,12 @@ export class GameScene extends BaseScene {
   private spawnTile(cx: number, cy: number, health: number, popDelay = 0): void {
     // soft shadow under the tile -> the stack reads as floating
     const shadow = this.add.image(0, 5, TEX.softCircle).setTint(0x9dbad8).setAlpha(0.18).setScale((TILE_SIZE + 10) / 256);
-    const img = this.add.image(0, 0, tileTexture(health)).setTint(this.COLORS.tile);
+    const img = this.add.image(0, 0, tileTexture(health)).setTint(this.tileStackTint());
     img.setDisplaySize(TILE_SIZE + 8, TILE_SIZE + 8);
-    // baked glaze flake overlaid on the tinted face (white, not tinted)
-    const glaze = this.add.image(0, 0, TEX.tileHighlight).setDisplaySize(TILE_SIZE + 8, TILE_SIZE + 8);
+    // AI face on top of the dark stack, or the baked glaze flake in
+    // procedural mode (white, not tinted)
+    const face = this.tileArtKey ? this.add.image(0, 0, this.tileArtKey).setDisplaySize(TILE_SIZE, TILE_SIZE) : null;
+    const glaze = face ? null : this.add.image(0, 0, TEX.tileHighlight).setDisplaySize(TILE_SIZE + 8, TILE_SIZE + 8);
     const label = this.add
       .text(0, 0, String(health), {
         fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
@@ -596,7 +608,7 @@ export class GameScene extends BaseScene {
         resolution: this.dpr,
       })
       .setOrigin(0.5);
-    const view = this.add.container(cx, cy, [shadow, img, glaze, label]).setDepth(DEPTH.tiles);
+    const view = this.add.container(cx, cy, [shadow, img, ...(face ? [face] : glaze ? [glaze] : []), label]).setDepth(DEPTH.tiles);
     // entrance pop: 0.6 -> 1, staggered per column by the caller
     view.setScale(0.6);
     this.tweens.add({ targets: view, scaleX: 1, scaleY: 1, duration: 150, delay: popDelay, ease: 'Quad.easeOut' });
@@ -609,9 +621,15 @@ export class GameScene extends BaseScene {
       active: true,
       view,
       img,
+      face,
       label,
     });
     this.updateTileView(this.tiles[this.tiles.length - 1] as TileRec);
+  }
+
+  /** Stack tint: dark stroke under AI art, the theme tile colour otherwise. */
+  private tileStackTint(): number {
+    return this.tileArtKey ? this.COLORS.tileStroke : this.COLORS.tile;
   }
 
   private updateTileView(t: TileRec): void {
@@ -636,11 +654,19 @@ export class GameScene extends BaseScene {
       this.tweens.killTweensOf(t.view);
       t.view.setScale(1);
       this.tweens.add({ targets: t.view, scaleX: 1.06, scaleY: 1.06, duration: 60, yoyo: true, ease: 'Quad.easeOut' });
-      // brief white flash on the face
-      t.img.setTintFill(0xffffff);
-      this.time.delayedCall(80, () => {
-        if (t.img.scene) t.img.setTint(this.COLORS.tile);
-      });
+      // brief flash on the face: AI art can't take setTintFill, so it
+      // flickers alpha; procedural tiles flash white as before
+      if (t.face) {
+        t.face.setAlpha(0.4);
+        this.time.delayedCall(80, () => {
+          if (t.face?.scene) t.face.setAlpha(1);
+        });
+      } else {
+        t.img.setTintFill(0xffffff);
+        this.time.delayedCall(80, () => {
+          if (t.img.scene) t.img.setTint(this.tileStackTint());
+        });
+      }
       return false;
     }
     t.active = false;
@@ -769,11 +795,15 @@ export class GameScene extends BaseScene {
   private spawnItem(cx: number, cy: number, type: ItemType): void {
     const meta = ITEM_META[type];
     const img = this.add.image(0, 0, TEX.itemBox).setTint(meta.color).setDisplaySize(ITEM_DROP_SIZE, ITEM_DROP_SIZE);
-    const glyph = this.add.image(0, 0, itemGlyph(type)).setTint(0xffffff);
+    // skin flavour: accent ring around the box + accent-tinted glyph
+    const ring = this.add.graphics();
+    ring.lineStyle(2, this.COLORS.accent, 0.85);
+    ring.strokeRoundedRect(-ITEM_DROP_SIZE / 2 - 2, -ITEM_DROP_SIZE / 2 - 2, ITEM_DROP_SIZE + 4, ITEM_DROP_SIZE + 4, 8);
+    const glyph = this.add.image(0, 0, itemGlyph(type)).setTint(this.COLORS.accent);
     glyph.setDisplaySize(ITEM_DROP_SIZE * 0.62, ITEM_DROP_SIZE * 0.62);
     // Inner container carries the idle float/wobble tweens so they never fight
     // the per-frame falling/magnet motion applied to the outer container.
-    const inner = this.add.container(0, 0, [img, glyph]);
+    const inner = this.add.container(0, 0, [img, ring, glyph]);
     const view = this.add.container(cx, cy, [inner]).setDepth(DEPTH.items);
     inner.y = 4;
     this.tweens.add({ targets: inner, y: -4, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -815,47 +845,47 @@ export class GameScene extends BaseScene {
         break;
       case 'doublebullets':
         this.doubleBullets = true;
-        showToast(this, this.W / 2, this.H * 0.45, '双子弹激活！');
+        showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'doublebullets')}激活！`);
         break;
       case 'speedboost':
         this.speedBoost += SPEED_BOOST_STEP;
-        showToast(this, this.W / 2, this.H * 0.45, '移动速度增加！');
+        showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'speedboost')}：移动速度增加！`);
         break;
       case 'rapidfire':
         this.rapidFire = true;
-        showToast(this, this.W / 2, this.H * 0.45, '快速射击激活！');
+        showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'rapidfire')}激活！`);
         break;
       case 'piercing':
         this.piercingBullets = true;
-        showToast(this, this.W / 2, this.H * 0.45, '穿透子弹激活！');
+        showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'piercing')}激活！`);
         break;
       case 'shieldbooster':
         this.shieldBooster = true;
         this.shield = true;
         this.shieldDuration = STRONG_SHIELD_FRAMES;
         this.svc.audio.shield();
-        showToast(this, this.W / 2, this.H * 0.45, '强化护盾激活！');
+        showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'shieldbooster')}激活！`);
         break;
       case 'magnet':
         this.magneticRange += 50;
-        showToast(this, this.W / 2, this.H * 0.45, '磁力拾取范围增加！');
+        showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'magnet')}：拾取范围增加！`);
         break;
       case 'bigbullets':
         if (this.bulletSizeBoost < MAX_BULLET_SIZE_BOOST) {
           this.bulletSizeBoost += 2;
-          showToast(this, this.W / 2, this.H * 0.45, '子弹尺寸增加！');
+          showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'bigbullets')}：子弹尺寸增加！`);
         } else {
           showToast(this, this.W / 2, this.H * 0.45, '子弹尺寸已达上限！');
         }
         break;
       case 'weaponduration':
         this.weaponDurationBoost += 0.5;
-        showToast(this, this.W / 2, this.H * 0.45, '武器持续时间延长！');
+        showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'weaponduration')}：武器时间延长！`);
         break;
       case 'extralife':
         if (this.lives < MAX_LIVES) {
           this.lives += 1;
-          showToast(this, this.W / 2, this.H * 0.45, '生命+1！');
+          showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'extralife')}+1！`);
         } else {
           showToast(this, this.W / 2, this.H * 0.45, '生命已满！');
         }
@@ -875,7 +905,7 @@ export class GameScene extends BaseScene {
       const d = weaponDuration(type, this.level, this.weaponDurationBoost);
       this.weapons[type] = { active: true, level: 1, duration: d, maxDuration: d, cooldown: 0 };
     }
-    showToast(this, this.W / 2, this.H * 0.45, `${WEAPON_NAMES[type]} Lv${this.weapons[type].level}`);
+    showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, type)} Lv${this.weapons[type].level}`);
   }
 
   // ============================================================================
@@ -1383,7 +1413,7 @@ export class GameScene extends BaseScene {
           onComplete: () => view.destroy(),
         });
         const meta = ITEM_META[item.type];
-        this.popText(item.x, item.y - 24, meta.name, 18, meta.color);
+        this.popText(item.x, item.y - 24, itemName(this.themeId, item.type), 18, meta.color);
         this.pickupItem(item.type);
       }
     }
@@ -1579,7 +1609,7 @@ export class GameScene extends BaseScene {
 
       label.setVisible(true);
       label.setPosition(px + 12, py + pillH / 2);
-      label.setText(`${WEAPON_NAMES[type]} Lv${w.level}`);
+      label.setText(`${itemName(this.themeId, type)} Lv${w.level}`);
       time.setVisible(true);
       time.setPosition(px + pillW - 10, py + pillH / 2);
       time.setText(`${Math.ceil(w.duration / 60)}s`);

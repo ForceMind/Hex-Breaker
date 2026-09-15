@@ -11,8 +11,10 @@ import { LevelSelectScene } from './game/scenes/LevelSelectScene';
 import { SettingsScene } from './game/scenes/SettingsScene';
 import { ThemeScene } from './game/scenes/ThemeScene';
 import { createServices } from './game/services';
+import { initialisePwa } from './services/pwa';
 
 const services = createServices();
+initialisePwa();
 
 const dpr = devicePixelRatioCapped();
 const designHeight = computeDesignHeight(window.innerWidth, window.innerHeight);

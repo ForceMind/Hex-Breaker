@@ -53,13 +53,13 @@ import { mulberry32 } from '../../core/prng';
 import type { BombType, BulletKind, ItemType, SpecialWeaponType, WeaponState, WeaponType } from '../../core/types';
 import { SPECIAL_WEAPONS } from '../../core/types';
 import { css, DEPTH, FONT_FAMILY } from '../config/layout';
-import { themeColors, type ThemeColors } from '../config/themes';
+import { activeThemeId, playerSpriteKey, resolvePlayerSprite, themeColors, type ThemeColors } from '../config/themes';
 import { TEX, itemGlyph, tileTexture } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { showToast } from '../ui/Toast';
 import { BaseScene } from './BaseScene';
-import { SHIP_LOAD_FAILED_KEY, SHIP_TEXTURE_KEY } from './BootScene';
+import { PLAYER_TEX_FAILED_KEY } from './BootScene';
 
 interface TileRec {
   id: number;
@@ -328,14 +328,17 @@ export class GameScene extends BaseScene {
   }
 
   private buildViews(): void {
-    // player: pre-generated ship art when available, else the procedural block
+    // player: the active theme's sprite art when available; falls back along
+    // theme -> sky sprite -> procedural block (see resolvePlayerSprite).
     const playerCenterX = this.px + PLAYER_WIDTH / 2;
     const playerCenterY = this.py + PLAYER_HEIGHT / 2;
     this.playerView = this.add.container(playerCenterX, playerCenterY).setDepth(DEPTH.player);
     const glow = this.add.image(0, 0, TEX.softCircle).setTint(0xffdd00).setAlpha(0.5).setScale(0.5);
-    const hasShip = this.textures.exists(SHIP_TEXTURE_KEY) && this.registry.get(SHIP_LOAD_FAILED_KEY) !== true;
-    const body = hasShip
-      ? this.add.image(0, 0, SHIP_TEXTURE_KEY).setDisplaySize(56, 56)
+    const failed = new Set((this.registry.get(PLAYER_TEX_FAILED_KEY) as string[] | undefined) ?? []);
+    const spriteKey = resolvePlayerSprite(activeThemeId(), (key) => this.textures.exists(key) && !failed.has(key));
+    const spriteSize = spriteKey === playerSpriteKey('space') ? 60 : 56; // the ship art reads better slightly larger
+    const body = spriteKey
+      ? this.add.image(0, 0, spriteKey).setDisplaySize(spriteSize, spriteSize)
       : this.add.image(0, 0, TEX.player).setTint(0xffdd00).setDisplaySize(PLAYER_WIDTH, PLAYER_HEIGHT);
     this.shieldRing = this.add.image(0, 0, TEX.shieldRing).setTint(0x00e5e5).setScale(0.5).setVisible(false);
     this.playerView.add([glow, body, this.shieldRing]);

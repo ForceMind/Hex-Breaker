@@ -1,16 +1,15 @@
-import { themeColors } from '../config/themes';
+import { themeColors, THEME_IDS, playerSpriteKey } from '../config/themes';
 import { ensureTextures, tileTexture } from '../rendering/textures';
 import { BaseScene } from './BaseScene';
 
-/** Registry flag set when assets/player-ship.png could not be loaded. */
-export const SHIP_LOAD_FAILED_KEY = 'shipLoadFailed';
-/** Texture key of the optional player ship image. */
-export const SHIP_TEXTURE_KEY = 'ship';
+/** Registry key holding the list of player-sprite keys that failed to load. */
+export const PLAYER_TEX_FAILED_KEY = 'playerTexFailed';
 
 /**
- * Generates every procedural texture, loads the optional player ship image
- * (graceful: a missing file just keeps the procedural fallback), shows a
- * small logo + loading hint for a beat, then hands over to HomeScene.
+ * Generates every procedural texture, loads the eight optional player-sprite
+ * images (graceful: missing files are recorded per key and the game falls
+ * back along theme -> sky -> procedural), shows a small logo + loading hint
+ * for a beat, then hands over to HomeScene.
  */
 export class BootScene extends BaseScene {
   constructor() {
@@ -30,10 +29,14 @@ export class BootScene extends BaseScene {
     const hint = this.text(cx, this.H - 140, '正在加载…', { size: 14, color: COLORS.textSecondary }).setAlpha(0);
     this.tweens.add({ targets: hint, alpha: 0.85, duration: 320 });
 
-    // Optional ship art; a 404 is fine and only sets the fallback flag.
-    this.load.image(SHIP_TEXTURE_KEY, 'assets/player-ship.png');
+    // Optional per-theme player art; 404s only grow the failure list.
+    for (const id of THEME_IDS) {
+      this.load.image(playerSpriteKey(id), `assets/player-${id}.png`);
+    }
     this.load.on('loaderror', (file: Phaser.Loader.File) => {
-      if (file.key === SHIP_TEXTURE_KEY) this.registry.set(SHIP_LOAD_FAILED_KEY, true);
+      if (!file.key.startsWith('player-')) return;
+      const failed = (this.registry.get(PLAYER_TEX_FAILED_KEY) as string[] | undefined) ?? [];
+      this.registry.set(PLAYER_TEX_FAILED_KEY, [...failed, file.key]);
     });
 
     // Hand over once the loader is done AND the 500ms logo beat has played.
@@ -56,3 +59,4 @@ export class BootScene extends BaseScene {
     this.load.start();
   }
 }
+

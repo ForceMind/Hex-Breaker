@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { activeThemeId, isThemeId, setActiveTheme, THEME_IDS, themeColors, THEMES, type ThemeColors } from '../src/game/config/themes';
+import {
+  activeThemeId,
+  isThemeId,
+  playerSpriteKey,
+  resolvePlayerSprite,
+  setActiveTheme,
+  THEME_IDS,
+  themeColors,
+  THEMES,
+  type ThemeColors,
+} from '../src/game/config/themes';
 
 const REQUIRED_KEYS: (keyof ThemeColors)[] = [
   'bgTop',
@@ -20,21 +30,42 @@ const REQUIRED_KEYS: (keyof ThemeColors)[] = [
   'heart',
 ];
 
+const EXPECTED_PRICES: Record<string, number> = {
+  sky: 0,
+  space: 200,
+  forest: 150,
+  sunset: 150,
+  ocean: 250,
+  neon: 300,
+  snow: 250,
+  lava: 400,
+};
+
 describe('themes', () => {
-  it('ships exactly sky/forest/sunset/neon with complete palettes', () => {
-    expect(THEME_IDS).toEqual(['sky', 'forest', 'sunset', 'neon']);
+  it('ships exactly eight themes with unique ids, complete palettes and sprites', () => {
+    expect(THEME_IDS).toEqual(['sky', 'space', 'forest', 'sunset', 'ocean', 'neon', 'snow', 'lava']);
+    expect(new Set(THEME_IDS).size).toBe(8);
     for (const id of THEME_IDS) {
+      const theme = THEMES[id];
+      expect(theme.id).toBe(id);
+      expect(theme.sprite).toBe(`player-${id}`);
+      expect(theme.name.length).toBeGreaterThan(0);
       for (const key of REQUIRED_KEYS) {
-        expect(typeof THEMES[id].colors[key], `${id}.${key}`).toBe('number');
+        expect(typeof theme.colors[key], `${id}.${key}`).toBe('number');
       }
     }
   });
 
-  it('sky is free; forest/sunset cost 150; neon costs 300', () => {
-    expect(THEMES.sky.price).toBe(0);
-    expect(THEMES.forest.price).toBe(150);
-    expect(THEMES.sunset.price).toBe(150);
-    expect(THEMES.neon.price).toBe(300);
+  it('follows the price table; sky stays free', () => {
+    for (const id of THEME_IDS) {
+      expect(THEMES[id].price, id).toBe(EXPECTED_PRICES[id]);
+    }
+  });
+
+  it('keeps the legacy ids stable so existing unlocks stay valid', () => {
+    for (const id of ['sky', 'forest', 'sunset', 'neon']) {
+      expect(isThemeId(id)).toBe(true);
+    }
   });
 
   it('sky keeps the original palette (regression guard)', () => {
@@ -49,13 +80,36 @@ describe('themes', () => {
     expect(themeColors().tile).toBe(THEMES.forest.colors.tile);
     setActiveTheme('nope');
     expect(activeThemeId()).toBe('sky');
-    setActiveTheme('neon');
-    expect(themeColors().textPrimary).toBe(0xf2f0ff);
+    setActiveTheme('lava');
+    expect(themeColors().tile).toBe(0xff7040);
     setActiveTheme('sky');
   });
 
-  it('isThemeId narrows strings', () => {
-    expect(isThemeId('sunset')).toBe(true);
-    expect(isThemeId('ocean')).toBe(false);
+  it('playerSpriteKey maps ids to texture keys', () => {
+    expect(playerSpriteKey('sky')).toBe('player-sky');
+    expect(playerSpriteKey('lava')).toBe('player-lava');
+  });
+});
+
+describe('resolvePlayerSprite fallback chain', () => {
+  const available =
+    (...keys: string[]) =>
+    (key: string) =>
+      keys.includes(key);
+
+  it('prefers the active theme sprite', () => {
+    expect(resolvePlayerSprite('neon', available('player-neon', 'player-sky'))).toBe('player-neon');
+  });
+
+  it('falls back to the sky sprite when the theme sprite is missing', () => {
+    expect(resolvePlayerSprite('lava', available('player-sky'))).toBe('player-sky');
+  });
+
+  it('returns null (procedural fallback) when every sprite is missing', () => {
+    expect(resolvePlayerSprite('ocean', available())).toBeNull();
+  });
+
+  it('an unknown theme id still resolves through the chain', () => {
+    expect(resolvePlayerSprite('whatever', available('player-sky'))).toBe('player-sky');
   });
 });

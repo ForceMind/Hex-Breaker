@@ -8,9 +8,9 @@ describe('CAMPAIGN_LEVELS', () => {
   });
 
   it('follows the formula table', () => {
-    expect(CAMPAIGN_LEVELS[0]).toEqual({ id: 1, targetKills: 24, virtualLevel: 1, itemTierCap: 1, seed: 7919 });
+    expect(CAMPAIGN_LEVELS[0]).toEqual({ id: 1, targetKills: 46, virtualLevel: 1, itemTierCap: 1, seed: 7919 });
     const last = CAMPAIGN_LEVELS[CAMPAIGN_COUNT - 1];
-    expect(last?.targetKills).toBe(140);
+    expect(last?.targetKills).toBe(220);
     expect(last?.virtualLevel).toBe(27);
     expect(last?.itemTierCap).toBe(15);
     expect(last?.seed).toBe(30 * 7919);

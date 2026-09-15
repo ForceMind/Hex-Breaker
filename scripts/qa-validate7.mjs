@@ -1,0 +1,96 @@
+// QA 第七轮：8 皮肤主题商店 + 默认小兵角色局内 + 第一关加长验证
+import { createRequire } from 'node:module';
+const require = createRequire('/Volumes/Work/Prive/Arrow Flow/package.json');
+const { chromium } = require('playwright');
+import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+
+const PORT = 4199;
+const BASE = `http://localhost:${PORT}/`;
+const OUT = new URL('../qa/', import.meta.url).pathname;
+mkdirSync(OUT, { recursive: true });
+
+const SEED_SAVE = JSON.stringify({
+  version: 4, highScore: 137, bestLevel: 18, gamesPlayed: 5, totalTilesDestroyed: 137,
+  settings: { music: true, sound: true, vibration: true },
+  campaign: { unlockedLevel: 1, records: {} },
+  daily: { lastPlayedDate: '', streak: 0, bestStars: 0, bestTimeMs: 0 },
+  economy: { coins: 600, totalEarned: 600 },
+  selectedTheme: 'sky', unlockedThemes: ['sky'],
+});
+
+const server = spawn('node', ['./node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'], {
+  cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore',
+});
+
+async function waitServer() {
+  for (let i = 0; i < 60; i++) {
+    try { const r = await fetch(BASE); if (r.ok) return; } catch {}
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error('preview server did not start');
+}
+async function canvasClick(page, fx, fy) {
+  const box = await page.locator('#game canvas').boundingBox();
+  await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+}
+
+const errors = [];
+try {
+  await waitServer();
+  const browser = await chromium.launch({
+    executablePath: process.env.HOME + '/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell',
+  });
+  const pc = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  pc.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  pc.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()));
+  await pc.addInitScript((save) => localStorage.setItem('hex-breaker:save', save), SEED_SAVE);
+  await pc.goto(BASE, { waitUntil: 'networkidle' });
+  await pc.waitForSelector('#game canvas', { timeout: 15000 });
+  await pc.waitForTimeout(2500);
+
+  // 主题商店（8 卡）
+  await canvasClick(pc, 0.65, 0.728);
+  await pc.waitForTimeout(1800);
+  await pc.screenshot({ path: OUT + 'v5-1-themes8.png' });
+
+  // 买霓虹（右列第 3 行附近）——先截布局，点 neon 卡（2列4行：neon 在第 4 行右？顺序 sky/space/forest/sunset/ocean/neon/snow/lava → neon=第3行右）
+  await canvasClick(pc, 0.68, 0.62);
+  await pc.waitForTimeout(900);
+  await pc.screenshot({ path: OUT + 'v5-2-buy-modal.png' });
+  await canvasClick(pc, 0.5, 0.54); // 支付
+  await pc.waitForTimeout(1000);
+  console.log('SAVE:', await pc.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('hex-breaker:save'));
+    return `coins=${s.economy.coins} theme=${s.selectedTheme} unlocked=${s.unlockedThemes.join('/')}`;
+  }));
+  await pc.screenshot({ path: OUT + 'v5-3-neon-applied.png' });
+
+  // 回主页（看 neon 主题）→ 进第一关看角色（默认 sky 小兵；先切回 sky）
+  await canvasClick(pc, 0.5, 0.93);
+  await pc.waitForTimeout(1500);
+  await pc.screenshot({ path: OUT + 'v5-4-home-neon.png' });
+
+  // 切回 sky：再进主题点 sky 卡（左上）
+  await canvasClick(pc, 0.65, 0.728);
+  await pc.waitForTimeout(1200);
+  await canvasClick(pc, 0.32, 0.3);
+  await pc.waitForTimeout(800);
+  await canvasClick(pc, 0.5, 0.93);
+  await pc.waitForTimeout(1200);
+
+  // 第一关：验证小兵角色 + 目标 46
+  await canvasClick(pc, 0.5, 0.471);
+  await pc.waitForTimeout(6000);
+  await pc.screenshot({ path: OUT + 'v5-5-level1-soldier.png' });
+  // 45 秒时未结束（46 杀约需 60s+），截目标进度
+  await pc.waitForTimeout(45000);
+  await pc.screenshot({ path: OUT + 'v5-6-level1-mid.png' });
+  console.log('LV1_PROGRESS:', await pc.evaluate(() => JSON.parse(localStorage.getItem('hex-breaker:save')).campaign.unlockedLevel));
+
+  await browser.close();
+  console.log('QA7_DONE');
+} finally {
+  server.kill('SIGKILL');
+}
+if (errors.length) { console.log('ERRORS:\n' + errors.join('\n')); process.exitCode = 2; }

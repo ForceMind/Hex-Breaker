@@ -29,7 +29,7 @@ export const BOSS_HP: Readonly<Record<number, number>> = { 10: 150, 20: 300, 30:
 function campaignLevel(id: number): LevelDef {
   const def: LevelDef = {
     id,
-    targetKills: 20 + id * 4, // L1 = 24 … L30 = 140
+    targetKills: 40 + id * 6, // L1 = 46 (约 1 分钟) … L30 = 220 (约 3–4 分钟)
     virtualLevel: 1 + Math.floor((id - 1) * 0.9), // L30 ≈ 27
     itemTierCap: Math.min(15, 1 + Math.floor(id / 2)), // L1 = 1, L30 = 15
     seed: id * 7919,

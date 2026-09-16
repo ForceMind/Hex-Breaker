@@ -50,9 +50,15 @@ export class AchievementScene extends BaseScene {
     this.text(cx, 107, `${doneCount} / ${ACHIEVEMENTS.length}`, { size: 14, bold: true });
 
     // Scrollable list inside a fixed window between the header and the button.
-    const listBottom = this.H - 130;
-    const viewH = listBottom - LIST_TOP;
-    const contentH = ACHIEVEMENTS.length * (ROW_H + ROW_GAP);
+    // Round the window down to a whole number of row pitches so the bottom
+    // edge never slices a row in half (which left clipped text crumbs
+    // "squeezed into the seam" below the last visible card).
+    const pitch = ROW_H + ROW_GAP;
+    const maxViewH = this.H - 130 - LIST_TOP;
+    const rowsVisible = Math.max(1, Math.floor((maxViewH + ROW_GAP) / pitch));
+    const viewH = rowsVisible * pitch - ROW_GAP;
+    const listBottom = LIST_TOP + viewH;
+    const contentH = ACHIEVEMENTS.length * pitch - ROW_GAP;
 
     const maskG = this.make.graphics({ x: 0, y: 0 }, false);
     maskG.fillRect(0, LIST_TOP, this.W, viewH);
@@ -63,7 +69,7 @@ export class AchievementScene extends BaseScene {
     list.setDepth(DEPTH.tiles);
 
     ACHIEVEMENTS.forEach((def, i) => {
-      list.add(this.buildRow(def, LIST_TOP + i * (ROW_H + ROW_GAP), unlocked[def.id]));
+      list.add(this.buildRow(def, LIST_TOP + i * pitch, unlocked[def.id]));
     });
 
     // Drag-to-scroll (pointer wheel on desktop too).

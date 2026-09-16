@@ -32,6 +32,7 @@ import {
   SHIELD_FRAMES,
   SPEED_BOOST_STEP,
   SPEED_PER_LEVEL,
+  LEVEL_UP_COINS,
   START_LIVES,
   STRONG_SHIELD_FRAMES,
   TILE_SIZE,
@@ -697,8 +698,11 @@ export class GameScene extends BaseScene {
     if (this.score % SCORE_PER_LEVEL === 0) {
       this.level += 1;
       this.gameSpeed += SPEED_PER_LEVEL;
+      // Level-up pays out instantly so levelling has a tangible reward, not
+      // just faster tiles.
+      this.svc.save.addCoins(LEVEL_UP_COINS);
       this.svc.audio.levelup();
-      this.popText(this.W / 2, this.H * 0.4, `等级 ${this.level}`, 26, this.COLORS.accent);
+      this.popText(this.W / 2, this.H * 0.4, `等级 ${this.level} · +${LEVEL_UP_COINS} 金币`, 26, this.COLORS.accent);
       this.sparks.explode(8, this.W / 2, this.H * 0.4);
     }
 

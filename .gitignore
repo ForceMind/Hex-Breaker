@@ -4,3 +4,4 @@ qa/
 .DS_Store
 ._*
 .reasonix/
+reasonix.toml

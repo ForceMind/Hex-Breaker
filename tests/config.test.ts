@@ -74,8 +74,8 @@ describe('dropChance', () => {
 });
 
 describe('weapon cooldowns', () => {
-  it('default is 17 frames', () => {
-    expect(weaponBaseCooldown('default', 1)).toBe(17);
+  it('default is 24 frames', () => {
+    expect(weaponBaseCooldown('default', 1)).toBe(24);
   });
 
   it('uzi floors at 3 frames', () => {
@@ -94,8 +94,8 @@ describe('weapon cooldowns', () => {
   });
 
   it('rapid fire halves the cooldown (floored)', () => {
-    expect(weaponCooldown('default', 1, false)).toBe(17);
-    expect(weaponCooldown('default', 1, true)).toBe(8);
+    expect(weaponCooldown('default', 1, false)).toBe(24);
+    expect(weaponCooldown('default', 1, true)).toBe(12);
     expect(weaponCooldown('uzi', 5, true)).toBe(1);
   });
 });

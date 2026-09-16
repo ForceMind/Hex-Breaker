@@ -5,6 +5,7 @@ import { themeColors } from '../config/themes';
 import { tileTexture } from '../rendering/textures';
 import { autoPromptInstallIfDue } from '../ui/installPrompt';
 import { Button } from '../ui/Button';
+import { openRechargeModal } from '../ui/RechargeModal';
 import { BaseScene } from './BaseScene';
 
 /** Title screen: campaign entry, level select / daily, endless, help/settings. */
@@ -24,7 +25,7 @@ export class HomeScene extends BaseScene {
 
     // Coin badge, top-right: gold disc + current balance in a capsule.
     const badgeText = this.text(0, 0, String(save.economy.coins), { size: 15, bold: true, align: 'left' });
-    const badgeW = badgeText.width + 56;
+    const badgeW = badgeText.width + 90; // extra room for the '+' recharge chip
     const badge = this.add.container(this.W - 16 - badgeW, 16);
     const bg = this.add.graphics();
     bg.fillStyle(0x000000, 0.12);
@@ -37,6 +38,15 @@ export class HomeScene extends BaseScene {
     bg.fillCircle(19, 17, 5);
     badgeText.setPosition(36, 17);
     badge.add([bg, badgeText]);
+    // '+' chip opens the simulated recharge sheet.
+    const plusG = this.add.graphics();
+    plusG.fillStyle(COLORS.accent, 1);
+    plusG.fillCircle(badgeW - 18, 17, 13);
+    const plusT = this.text(badgeW - 18, 16, '+', { size: 19, bold: true, color: 0xffffff });
+    badge.add([plusG, plusT]);
+    const plusHit = this.add.zone(badgeW - 18, 17, 34, 34).setInteractive({ useHandCursor: true });
+    plusHit.on('pointerup', () => openRechargeModal(this, this.W, this.H, () => this.refresh()));
+    badge.add(plusHit);
     badge.setDepth(DEPTH.hud);
 
     // Ambient octagon decorations: different stack thicknesses, low alpha,
@@ -137,13 +147,21 @@ export class HomeScene extends BaseScene {
       fontSize: 16,
       onClick: () => this.go('HelpScene'),
     });
-    const settingsBtn = new Button(this, cx, startY + 354, {
+    const settingsBtn = new Button(this, cx - 76, startY + 354, {
       label: '设置',
       variant: 'ghost',
       width: 140,
       height: 46,
       fontSize: 16,
       onClick: () => this.go('SettingsScene'),
+    });
+    const rechargeBtn = new Button(this, cx + 76, startY + 354, {
+      label: '充值',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => openRechargeModal(this, this.W, this.H, () => this.refresh()),
     });
 
     const version = this.text(cx, this.H - 36, `v${__APP_VERSION__}`, { size: 13, color: COLORS.textSecondary, alpha: 0.7 });
@@ -165,6 +183,7 @@ export class HomeScene extends BaseScene {
       achBtn,
       helpBtn,
       settingsBtn,
+      rechargeBtn,
       version,
     ];
     entrance.forEach((obj, i) => {

@@ -50,7 +50,7 @@ export class Button extends Phaser.GameObjects.Container {
     const texts: Record<ButtonVariant, number> = {
       primary: COLORS.buttonText,
       secondary: COLORS.textPrimary,
-      ghost: COLORS.textPrimary,
+      ghost: COLORS.accent,
       danger: 0xffffff,
     };
     this.fillColor = opts.fill ?? fills[variant];
@@ -106,16 +106,22 @@ export class Button extends Phaser.GameObjects.Container {
   private drawBg(variant: ButtonVariant): void {
     const r = this.opts.radius ?? Math.min(this.btnH / 2, 20);
     const g = this.bg;
+    const COLORS = themeColors();
     g.clear();
     if (variant !== 'ghost') {
       g.fillStyle(0x000000, 0.14);
       g.fillRoundedRect(-this.btnW / 2, -this.btnH / 2 + 4, this.btnW, this.btnH, r);
     }
-    g.fillStyle(this.fillColor, variant === 'ghost' ? 0.55 : 1);
+    // Ghost = outlined white chip (accent frame), NOT a dimmed fill: dimming
+    // read as "disabled". Disabled state still dims (see setEnabled).
+    g.fillStyle(this.fillColor, variant === 'ghost' ? 0.92 : 1);
     g.fillRoundedRect(-this.btnW / 2, -this.btnH / 2, this.btnW, this.btnH, r);
     if (variant === 'primary' || variant === 'danger') {
       g.fillStyle(0xffffff, 0.18);
       g.fillRoundedRect(-this.btnW / 2 + 4, -this.btnH / 2 + 3, this.btnW - 8, this.btnH / 2 - 4, { tl: r - 2, tr: r - 2, bl: 6, br: 6 });
+    } else if (variant === 'ghost') {
+      g.lineStyle(2, COLORS.accent, 0.9);
+      g.strokeRoundedRect(-this.btnW / 2 + 1, -this.btnH / 2 + 1, this.btnW - 2, this.btnH - 2, r - 1);
     } else {
       g.lineStyle(2, 0x17364f, 0.15);
       g.strokeRoundedRect(-this.btnW / 2, -this.btnH / 2, this.btnW, this.btnH, r);

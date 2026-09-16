@@ -101,15 +101,22 @@ describe('resolvePlayerSprite fallback chain', () => {
     expect(resolvePlayerSprite('neon', available('player-neon', 'player-sky'))).toBe('player-neon');
   });
 
-  it('falls back to the sky sprite when the theme sprite is missing', () => {
-    expect(resolvePlayerSprite('lava', available('player-sky'))).toBe('player-sky');
+  it('falls back to the procedural block (null) when the theme sprite is missing', () => {
+    // The base edition (sky) owns the yellow block, so a missing themed
+    // sprite must NOT substitute the sky sprite — it degrades procedurally.
+    expect(resolvePlayerSprite('lava', available('player-sky'))).toBeNull();
+  });
+
+  it('the base edition (sky) always uses the procedural yellow block', () => {
+    expect(resolvePlayerSprite('sky', available('player-sky'))).toBeNull();
   });
 
   it('returns null (procedural fallback) when every sprite is missing', () => {
     expect(resolvePlayerSprite('ocean', available())).toBeNull();
   });
 
-  it('an unknown theme id still resolves through the chain', () => {
-    expect(resolvePlayerSprite('whatever', available('player-sky'))).toBe('player-sky');
+  it('an unknown theme id resolves its own sprite when present', () => {
+    expect(resolvePlayerSprite('whatever', available('player-whatever'))).toBe('player-whatever');
+    expect(resolvePlayerSprite('whatever', available('player-sky'))).toBeNull();
   });
 });

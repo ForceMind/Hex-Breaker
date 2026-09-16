@@ -30,7 +30,14 @@ export class AudioService {
   /** Call from a pointer/keyboard handler. Safe to call repeatedly. */
   unlock(): void {
     if (this.unlocked) {
-      if (this.ctx && this.ctx.state !== 'running') void this.ctx.resume().catch(() => undefined);
+      // Already created: re-arm the state watcher (some browsers clear
+      // onstatechange) and force-resume whenever the context is not running —
+      // desktop Chrome can auto-suspend an idle context after tab switches,
+      // which previously left the game silent until a full reload.
+      if (this.ctx) {
+        this.armStateWatcher();
+        if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => undefined);
+      }
       return;
     }
     try {
@@ -44,19 +51,24 @@ export class AudioService {
       this.musicGain.gain.value = this.musicEnabled ? 0.12 : 0;
       this.musicGain.connect(this.master);
       this.unlocked = true;
+      this.armStateWatcher();
       if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => undefined);
-      this.ctx.onstatechange = () => {
-        if (!this.ctx) return;
-        // 'interrupted' is a Safari-only state not present in the DOM types.
-        const state: string = this.ctx.state;
-        if ((state === 'interrupted' || state === 'suspended') && document.visibilityState === 'visible') {
-          void this.ctx.resume().catch(() => undefined);
-        }
-      };
       this.startMusic();
     } catch {
       this.ctx = null;
     }
+  }
+
+  private armStateWatcher(): void {
+    if (!this.ctx) return;
+    this.ctx.onstatechange = () => {
+      if (!this.ctx) return;
+      // 'interrupted' is a Safari-only state not present in the DOM types.
+      const state: string = this.ctx.state;
+      if ((state === 'interrupted' || state === 'suspended') && document.visibilityState === 'visible') {
+        void this.ctx.resume().catch(() => undefined);
+      }
+    };
   }
 
   setSoundEnabled(v: boolean): void {

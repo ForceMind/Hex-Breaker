@@ -27,6 +27,7 @@
 
 - 开发：`npm install` 后 `npm run dev` / `npm test` / `npm run typecheck` / `npm run build`。
 - 部署：`npm run deploy:cf`（build + wrangler pages deploy dist --project-name hex-breaker）。部署后 curl 验证线上 bundle hash 与 dist 一致。注意 SW 缓存：线上验证要带版本参数或刷新两次。
+- **wrangler / gh 在本机真实环境已登录（凭据在沙盒外长期有效）**：报"未登录 / 需要 CLOUDFLARE_API_TOKEN / 非交互模式"错误时，先直接重试同一命令（用户可能刚在真机刷新过登录）；仍失败则告知用户在真机终端跑 `npx wrangler login`。不要当成沙盒固有限制，也不要手写 OAuth 刷新脚本（auth.workers.dev 在本机网络不可达，刷新必失败）。
 - QA：`scripts/qa-validate*.mjs` 用 Playwright 截图验证（通过 createRequire 借用 "/Volumes/Work/Prive/Arrow Flow/package.json" 的 playwright；浏览器二进制在 ~/Library/Caches/ms-playwright/chromium_headless_shell-1243）。qa/ 截图不入库。可用 addInitScript 预置 localStorage 存档跳过解锁限制。跑完必须杀干净 vite preview 进程（用 SIGKILL，npm 包装进程不会传导 SIGTERM）。
 - AI 生图：image_generation 插件（/Users/wxx110/Library/Application Support/kimi-desktop/daimon-share/daimon/runtime/kimi-code/home/plugins/managed/image_generation），transparent PNG 背景；生成后用 PIL 裁掉左下"AI生成"水印（裁底部 ~10% 再 alpha bbox）+ 去小连通域噪点 + 缩放（角色/砖块 128px）入 public/assets/，原图留 assets-src/。
 - 交付标准：功能做完要浏览器实际截图验证（ canvas 像素级检查，不只是 HTTP 200），确认无 JS 报错，然后 commit + push + deploy:cf，CHANGELOG 加条目、package.json 升版本。

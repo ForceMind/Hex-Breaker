@@ -803,9 +803,21 @@ export class GameScene extends BaseScene {
     ring.strokeRoundedRect(-ITEM_DROP_SIZE / 2 - 2, -ITEM_DROP_SIZE / 2 - 2, ITEM_DROP_SIZE + 4, ITEM_DROP_SIZE + 4, 8);
     const glyph = this.add.image(0, 0, itemGlyph(type)).setTint(this.COLORS.accent);
     glyph.setDisplaySize(ITEM_DROP_SIZE * 0.62, ITEM_DROP_SIZE * 0.62);
+    // Name label below the box, always visible while falling (the pickup
+    // pop-text alone was too fleeting to learn the item names).
+    const nameLabel = this.add.text(0, ITEM_DROP_SIZE / 2 + 12, itemName(this.themeId, type), {
+      fontFamily: FONT_FAMILY,
+      fontSize: '13px',
+      fontStyle: 'bold',
+      color: '#ffffff',
+      stroke: '#1a2b3c',
+      strokeThickness: 3,
+      resolution: this.dpr,
+    });
+    nameLabel.setOrigin(0.5);
     // Inner container carries the idle float/wobble tweens so they never fight
     // the per-frame falling/magnet motion applied to the outer container.
-    const inner = this.add.container(0, 0, [img, ring, glyph]);
+    const inner = this.add.container(0, 0, [img, ring, glyph, nameLabel]);
     const view = this.add.container(cx, cy, [inner]).setDepth(DEPTH.items);
     inner.y = 4;
     this.tweens.add({ targets: inner, y: -4, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });

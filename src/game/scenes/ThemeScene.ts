@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { runAchievementsCheck } from '../achievements';
 import { ASSET_TEX_FAILED_KEY } from '../config/assets';
 import { resolveThemeBg, themeColors, setActiveTheme, THEMES, THEME_IDS, type ThemeDef } from '../config/themes';
-import { tileTexture } from '../rendering/textures';
+import { TEX, tileTexture } from '../rendering/textures';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { showToast } from '../ui/Toast';
@@ -97,10 +97,14 @@ export class ThemeScene extends BaseScene {
       img.setMask(maskG.createGeometryMask());
     }
 
-    // Character sprite preview; octagon placeholder while the art is missing.
-    const hasSprite = this.textures.exists(theme.sprite) && !this.failedSprites.has(theme.sprite);
+    // Character sprite preview; the base edition (sky) previews the v1
+    // procedural yellow block, other themes fall back to an octagon while
+    // their art is missing.
+    const hasSprite = theme.id !== 'sky' && this.textures.exists(theme.sprite) && !this.failedSprites.has(theme.sprite);
     if (hasSprite) {
       card.add(this.add.image(0, -CARD_H / 2 + PREVIEW_H / 2, theme.sprite).setDisplaySize(76, 76));
+    } else if (theme.id === 'sky') {
+      card.add(this.add.image(0, -CARD_H / 2 + PREVIEW_H / 2, TEX.player).setTint(0xffdd00).setDisplaySize(56, 56));
     } else {
       card.add(this.add.image(0, -CARD_H / 2 + PREVIEW_H / 2, tileTexture(4)).setTint(theme.colors.tile).setDisplaySize(64, 64));
     }

@@ -266,12 +266,16 @@ export function themeColors(): ThemeColors {
  * Player sprite fallback chain: the active theme's sprite -> the sky sprite
  * -> null (caller falls back to the procedural block). `available` reports
  * whether a texture key is loaded and intact.
+ *
+ * Art principle: the default theme (sky) IS the v1 base edition and keeps
+ * the plain procedural yellow block — themed AI sprites are the paid skins.
+ * (An AI-drawn "naive yellow block" may replace the procedural one later,
+ * but it must keep the v1 look.)
  */
 export function resolvePlayerSprite(themeId: string, available: (key: string) => boolean): string | null {
+  if (themeId === DEFAULT_THEME_ID) return null;
   const primary = playerSpriteKey(themeId);
   if (available(primary)) return primary;
-  const fallback = playerSpriteKey(DEFAULT_THEME_ID);
-  if (available(fallback)) return fallback;
   return null;
 }
 

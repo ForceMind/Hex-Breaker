@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import './styles/global.css';
 import { computeDesignHeight, DESIGN_WIDTH, devicePixelRatioCapped } from './game/config/layout';
 import { BootScene } from './game/scenes/BootScene';
+import { AchievementScene } from './game/scenes/AchievementScene';
 import { DailyScene } from './game/scenes/DailyScene';
 import { GameScene } from './game/scenes/GameScene';
 import { HelpScene } from './game/scenes/HelpScene';
@@ -43,7 +44,7 @@ const game = new Phaser.Game({
   // manager would only open a second AudioContext.
   audio: { noAudio: true },
   disableContextMenu: true,
-  scene: [BootScene, HomeScene, HelpScene, SettingsScene, LevelSelectScene, DailyScene, ThemeScene, LeaderboardScene, GameScene],
+  scene: [BootScene, HomeScene, HelpScene, SettingsScene, LevelSelectScene, DailyScene, ThemeScene, LeaderboardScene, AchievementScene, GameScene],
 });
 
 game.registry.set('dpr', dpr);

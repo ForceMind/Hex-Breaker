@@ -76,7 +76,7 @@ export class HomeScene extends BaseScene {
 
     // Button ladder: campaign primary, select/daily pair, endless secondary,
     // then help/settings as quiet ghost links.
-    const startY = Math.min(this.H - 420, 452);
+    const startY = Math.min(this.H - 470, 432);
     const campaignBtn = new Button(this, cx, startY, {
       label: `继续闯关 Lv${nextLevel}`,
       width: 320,
@@ -105,22 +105,6 @@ export class HomeScene extends BaseScene {
       height: 60,
       onClick: () => this.go('GameScene', { mode: 'endless' }),
     });
-    const helpBtn = new Button(this, cx - 76, startY + 300, {
-      label: '玩法说明',
-      variant: 'ghost',
-      width: 140,
-      height: 46,
-      fontSize: 16,
-      onClick: () => this.go('HelpScene'),
-    });
-    const settingsBtn = new Button(this, cx + 76, startY + 300, {
-      label: '设置',
-      variant: 'ghost',
-      width: 140,
-      height: 46,
-      fontSize: 16,
-      onClick: () => this.go('SettingsScene'),
-    });
     const boardBtn = new Button(this, cx - 76, startY + 246, {
       label: '排行',
       variant: 'ghost',
@@ -136,6 +120,30 @@ export class HomeScene extends BaseScene {
       height: 46,
       fontSize: 16,
       onClick: () => this.go('ThemeScene'),
+    });
+    const achBtn = new Button(this, cx - 76, startY + 300, {
+      label: '成就',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => this.go('AchievementScene'),
+    });
+    const helpBtn = new Button(this, cx + 76, startY + 300, {
+      label: '玩法说明',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => this.go('HelpScene'),
+    });
+    const settingsBtn = new Button(this, cx, startY + 354, {
+      label: '设置',
+      variant: 'ghost',
+      width: 140,
+      height: 46,
+      fontSize: 16,
+      onClick: () => this.go('SettingsScene'),
     });
 
     const version = this.text(cx, this.H - 36, `v${__APP_VERSION__}`, { size: 13, color: COLORS.textSecondary, alpha: 0.7 });
@@ -154,6 +162,7 @@ export class HomeScene extends BaseScene {
       endlessBtn,
       boardBtn,
       themeBtn,
+      achBtn,
       helpBtn,
       settingsBtn,
       version,

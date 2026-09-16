@@ -42,6 +42,8 @@ import {
   weaponCooldown,
   weaponDuration,
 } from '../../core/config';
+import { type AchievementDef, type RunSummary } from '../../core/achievements';
+import { runAchievementsCheck } from '../achievements';
 import { calculatePlayerPower, calculateTileDensity, calculateTileHealthRange, difficultyLabel, tileFallSpeed } from '../../core/difficulty';
 import { campaignCoinReward, COINS_DAILY, endlessCoinReward } from '../../core/economy';
 import { formatTimeMs } from '../../core/format';
@@ -1675,6 +1677,15 @@ export class GameScene extends BaseScene {
     return Math.round((this.elapsedFrames / 60) * 1000);
   }
 
+  /**
+   * Evaluate achievements against the post-run save snapshot; newly unlocked
+   * ones are persisted, their coin rewards paid out, and a toast shown.
+   * Returns the freshly unlocked defs (empty when nothing new).
+   */
+  private checkAndGrantAchievements(run: RunSummary): AchievementDef[] {
+    return runAchievementsCheck(this, run);
+  }
+
   private finalizeRun(): void {
     if (this.finalized) return;
     this.finalized = true;
@@ -1738,13 +1749,15 @@ export class GameScene extends BaseScene {
     if (this.mode === 'level') {
       const firstClear = !this.svc.save.get().campaign.records[def.id];
       coins = campaignCoinReward(firstClear);
-      this.svc.save.recordCampaignResult(def.id, stars, timeMs);
+      this.svc.save.recordCampaignResult(def.id, stars, timeMs, this.score);
     } else if (this.mode === 'daily') {
       coins = this.dailyRewardPending ? COINS_DAILY : 0;
-      this.svc.save.recordDailyResult(this.dateKey, stars, timeMs);
+      this.svc.save.recordDailyResult(this.dateKey, stars, timeMs, this.score);
     }
     if (coins > 0) this.svc.save.addCoins(coins);
     this.finalized = true;
+
+    const bonus = this.checkAndGrantAchievements({ mode: this.mode, bossDefeated: this.mode === 'level' && !!def.boss, stars });
 
     const hasNext = this.mode === 'level' && def.id < 30;
     const modal = new Modal(this, this.W, this.H, {
@@ -1775,6 +1788,9 @@ export class GameScene extends BaseScene {
       }),
     );
     if (coins > 0) modal.panel.add(this.text(0, 14, `+${coins} 金币`, { size: 16, bold: true, color: 0xcc8800 }));
+    if (bonus.length > 0) {
+      modal.panel.add(this.text(0, 42, `🏆 解锁成就：${bonus.map((a) => a.name).join('、')}`, { size: 13, bold: true, color: this.COLORS.accent, wrap: 360 }));
+    }
 
     const buttons: Button[] = [];
     if (hasNext) {
@@ -1808,9 +1824,10 @@ export class GameScene extends BaseScene {
 
   private defeat(): void {
     // A failed daily run still counts as showing up (0 stars keeps the streak).
-    if (this.mode === 'daily') this.svc.save.recordDailyResult(this.dateKey, 0, this.elapsedMs());
+    if (this.mode === 'daily') this.svc.save.recordDailyResult(this.dateKey, 0, this.elapsedMs(), this.score);
     this.finalized = true;
     this.svc.audio.gameover();
+    this.checkAndGrantAchievements({ mode: this.mode, stars: 0 });
 
     const modal = new Modal(this, this.W, this.H, { width: 400, height: 430, title: '挑战失败' });
     const icon = this.add.container(0, -112);
@@ -1844,6 +1861,7 @@ export class GameScene extends BaseScene {
     this.finalized = true;
     const coins = endlessCoinReward(this.score);
     if (coins > 0) this.svc.save.addCoins(coins);
+    const bonus = this.checkAndGrantAchievements({ mode: 'endless' });
     const isRecord = newHighScore || newBestLevel;
     if (isRecord) {
       this.svc.audio.win();
@@ -1873,8 +1891,11 @@ export class GameScene extends BaseScene {
     modal.panel.add(this.text(0, 24, `等级 Lv${this.level} · 消灭瓦片 ${this.score}`, { size: 15, color: this.COLORS.textSecondary }));
     modal.panel.add(this.text(0, 52, `历史最高 ${this.svc.save.get().highScore}`, { size: 13, color: this.COLORS.textSecondary }));
     if (coins > 0) modal.panel.add(this.text(0, 80, `+${coins} 金币`, { size: 15, bold: true, color: 0xcc8800 }));
-    const again = new Button(this, 0, 124, { label: '再来一局', width: 280, height: 62, onClick: () => this.refresh() });
-    const home = new Button(this, 0, 200, { label: '返回主页', variant: 'secondary', width: 280, height: 56, onClick: () => this.go('HomeScene') });
+    if (bonus.length > 0) {
+      modal.panel.add(this.text(0, 106, `🏆 解锁成就：${bonus.map((a) => a.name).join('、')}`, { size: 13, bold: true, color: this.COLORS.accent, wrap: 360 }));
+    }
+    const again = new Button(this, 0, 148, { label: '再来一局', width: 280, height: 62, onClick: () => this.refresh() });
+    const home = new Button(this, 0, 224, { label: '返回主页', variant: 'secondary', width: 280, height: 56, onClick: () => this.go('HomeScene') });
     modal.panel.add([again, home]);
     this.overLayer = modal;
   }

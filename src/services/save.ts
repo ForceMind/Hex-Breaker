@@ -5,7 +5,7 @@
 import { previousDateKey } from '../core/levels';
 
 export const SAVE_KEY = 'hex-breaker:save';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export interface Settings {
   music: boolean;
@@ -51,6 +51,8 @@ export interface SaveData {
   economy: Economy;
   selectedTheme: string;
   unlockedThemes: string[];
+  /** v5: achievement id -> unlock timestamp (ms). Absent id = locked. */
+  achievements: Record<string, number>;
 }
 
 export interface StorageLike {
@@ -72,6 +74,7 @@ export function defaultSave(): SaveData {
     economy: { coins: 0, totalEarned: 0 },
     selectedTheme: DEFAULT_THEME,
     unlockedThemes: [DEFAULT_THEME],
+    achievements: {},
   };
 }
 
@@ -123,6 +126,13 @@ export function migrate(raw: unknown): SaveData {
   if (!d.unlockedThemes.includes(DEFAULT_THEME)) d.unlockedThemes.unshift(DEFAULT_THEME);
   d.selectedTheme = typeof raw.selectedTheme === 'string' ? raw.selectedTheme : DEFAULT_THEME;
   if (!d.unlockedThemes.includes(d.selectedTheme)) d.selectedTheme = DEFAULT_THEME;
+  // v5 additions; absent in v1-v4 saves, in which case defaults are kept.
+  if (isObj(raw.achievements)) {
+    for (const [id, value] of Object.entries(raw.achievements)) {
+      const ts = int(value, 0, 0);
+      if (ts > 0) d.achievements[id] = ts;
+    }
+  }
   d.version = SAVE_VERSION;
   return d;
 }
@@ -136,7 +146,8 @@ export function isValidSave(data: SaveData): boolean {
     isObj(data.campaign) &&
     isObj(data.daily) &&
     isObj(data.economy) &&
-    Array.isArray(data.unlockedThemes)
+    Array.isArray(data.unlockedThemes) &&
+    isObj(data.achievements)
   );
 }
 
@@ -252,8 +263,10 @@ export class SaveService {
    * Campaign level cleared: keep only the better record (higher stars; on a
    * tie the faster time) and unlock the next level, capped at 30. Returns
    * whether the stored record improved.
+   * `kills` = tiles destroyed this run; fed into totalTilesDestroyed so the
+   * lifetime counter covers campaign runs too (previously endless-only).
    */
-  recordCampaignResult(levelId: number, stars: number, timeMs: number): { improved: boolean } {
+  recordCampaignResult(levelId: number, stars: number, timeMs: number, kills = 0): { improved: boolean } {
     const id = Math.max(1, Math.min(30, Math.round(levelId)));
     const s = Math.max(0, Math.min(3, Math.round(stars)));
     const t = Math.max(0, Math.round(timeMs));
@@ -261,6 +274,7 @@ export class SaveService {
     const improved = !prev || s > prev.stars || (s === prev.stars && t < prev.bestTimeMs);
     if (improved) this.data.campaign.records[id] = { stars: s, bestTimeMs: t };
     this.data.campaign.unlockedLevel = Math.min(30, Math.max(this.data.campaign.unlockedLevel, id + 1));
+    this.data.totalTilesDestroyed += Math.max(0, Math.round(kills));
     this.save();
     return { improved };
   }
@@ -271,7 +285,7 @@ export class SaveService {
    * to 1 otherwise. Best record follows the stars-then-time rule. Returns
    * whether the daily best improved.
    */
-  recordDailyResult(dateKey: string, stars: number, timeMs: number): { improved: boolean } {
+  recordDailyResult(dateKey: string, stars: number, timeMs: number, kills = 0): { improved: boolean } {
     const d = this.data.daily;
     if (d.lastPlayedDate === previousDateKey(dateKey)) d.streak += 1;
     else if (d.lastPlayedDate !== dateKey) d.streak = 1;
@@ -284,6 +298,7 @@ export class SaveService {
       d.bestStars = s;
       d.bestTimeMs = t;
     }
+    this.data.totalTilesDestroyed += Math.max(0, Math.round(kills));
     this.save();
     return { improved };
   }
@@ -322,5 +337,18 @@ export class SaveService {
       this.save();
     }
     return true;
+  }
+
+  /** Mark achievements unlocked (idempotent per id); persists once. */
+  unlockAchievements(ids: readonly string[]): void {
+    const now = Date.now();
+    let changed = false;
+    for (const id of ids) {
+      if (this.data.achievements[id] === undefined) {
+        this.data.achievements[id] = now;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
   }
 }

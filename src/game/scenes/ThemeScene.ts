@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { runAchievementsCheck } from '../achievements';
 import { ASSET_TEX_FAILED_KEY } from '../config/assets';
 import { resolveThemeBg, themeColors, setActiveTheme, THEMES, THEME_IDS, type ThemeDef } from '../config/themes';
 import { tileTexture } from '../rendering/textures';
@@ -172,6 +173,7 @@ export class ThemeScene extends BaseScene {
         setActiveTheme(theme.id);
         modal.close();
         showToast(this, this.W / 2, this.H * 0.5, `已解锁「${theme.name}」！`);
+        this.time.delayedCall(700, () => runAchievementsCheck(this));
         this.time.delayedCall(450, () => this.refresh());
       },
     });

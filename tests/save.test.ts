@@ -79,6 +79,26 @@ describe('migrate', () => {
     expect(broken.selectedTheme).toBe('sky');
   });
 
+  it('upgrades v4 saves by filling achievements defaults', () => {
+    const v4 = {
+      version: 4,
+      highScore: 200,
+      economy: { coins: 90, totalEarned: 90 },
+      selectedTheme: 'sky',
+      unlockedThemes: ['sky'],
+    };
+    const d = migrate(v4);
+    expect(d.version).toBe(SAVE_VERSION);
+    expect(d.achievements).toEqual({});
+  });
+
+  it('sanitizes v5 achievement map: drops invalid timestamps', () => {
+    const d = migrate({
+      achievements: { 'tiles-100': 1726000000000, bad: -5, junk: 'x', zero: 0, frac: 3.7 },
+    });
+    expect(d.achievements).toEqual({ 'tiles-100': 1726000000000, frac: 4 });
+  });
+
   it('preserves valid campaign/daily payloads and sanitizes bad entries', () => {
     const d = migrate({
       campaign: {
@@ -167,6 +187,18 @@ describe('SaveService', () => {
       expect(svc.recordCampaignResult(3, 2, 60000)).toEqual({ improved: true });
       expect(svc.get().campaign.records[3]).toEqual({ stars: 2, bestTimeMs: 60000 });
       expect(svc.get().campaign.unlockedLevel).toBe(4);
+    });
+
+    it('campaign/daily runs feed totalTilesDestroyed (achievement counter)', () => {
+      const svc = new SaveService(memoryStorage());
+      svc.recordCampaignResult(1, 3, 50000, 46);
+      expect(svc.get().totalTilesDestroyed).toBe(46);
+      svc.recordCampaignResult(1, 2, 70000, 46); // repeat clear still counts tiles
+      expect(svc.get().totalTilesDestroyed).toBe(92);
+      svc.recordDailyResult('2026-04-09', 0, 80000, 17);
+      expect(svc.get().totalTilesDestroyed).toBe(109);
+      svc.recordDailyResult('2026-04-09', 0, 81000, 17); // same-day retry counts tiles too
+      expect(svc.get().totalTilesDestroyed).toBe(126);
     });
 
     it('only better results overwrite: higher stars, or same stars with faster time', () => {

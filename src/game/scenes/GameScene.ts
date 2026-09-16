@@ -335,6 +335,11 @@ export class GameScene extends BaseScene {
     this.boomerangs = [];
     this.boss = null;
     this.nextTileId = 1;
+    // HUD weapon-bar texts are re-created in create(); the scene instance is
+    // reused across restarts, so drop the previous run's (destroyed) refs —
+    // calling setText on a destroyed Text crashes Phaser (null frame data).
+    this.barLabels = [];
+    this.barTimes = [];
   }
 
   private buildViews(): void {
@@ -1596,7 +1601,9 @@ export class GameScene extends BaseScene {
       const label = this.barLabels[i];
       const time = this.barTimes[i];
       const type = active[i];
-      if (!label || !time) continue;
+      // Destroyed texts (e.g. a stale reference during scene shutdown) have
+      // no live texture frame — setText on them crashes Phaser.
+      if (!label || !time || !label.scene || !time.scene) continue;
       if (!type) {
         label.setVisible(false);
         time.setVisible(false);

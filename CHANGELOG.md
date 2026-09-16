@@ -5,6 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本控制](https://semver.org/spec/v2.0.0.html)。
 
+## [2.7.1] - 2026-09-16
+
+### 修复 🐛
+- **「再来一局」后武器计时条崩溃**：`barLabels`/`barTimes` 只在场景实例化时初始化，Phaser 场景实例跨 restart 复用，导致数组里累积上一局已销毁的 Text；第二局激活特殊武器时 `setText` 访问已销毁纹理帧（`Cannot read properties of null (reading 'drawImage')`）每帧报错。现于 `init()` 重置这两个数组，并在 `drawWeaponBars` 跳过已销毁文本
+
 ## [2.7.0] - 2026-09-16
 
 ### 新增 ✨

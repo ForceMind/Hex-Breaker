@@ -64,7 +64,7 @@ export const WEAPON_BAR_COLORS: Record<SpecialWeaponType, number> = {
 export function weaponBaseCooldown(type: WeaponType, level: number): number {
   switch (type) {
     case 'default':
-      return 24;
+      return 30;
     case 'uzi':
       return Math.max(3, 8 - level);
     case 'shotgun':

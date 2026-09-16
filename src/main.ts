@@ -30,7 +30,7 @@ const game = new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.NO_CENTER,
   },
-  fps: { target: 60 },
+  fps: { target: 60, limit: 60 },
   render: {
     antialias: true,
     roundPixels: false,

@@ -22,6 +22,7 @@ import {
   MAX_BULLET_SIZE_BOOST,
   MAX_LIVES,
   PATTERN_NAMES,
+  PIERCING_MAX_HITS,
   PLAYER_BOTTOM_MARGIN,
   PLAYER_HEIGHT,
   PLAYER_SPEED,
@@ -32,7 +33,6 @@ import {
   SHIELD_FRAMES,
   SPEED_BOOST_STEP,
   SPEED_PER_LEVEL,
-  LEVEL_UP_COINS,
   START_LIVES,
   STRONG_SHIELD_FRAMES,
   TILE_SIZE,
@@ -51,6 +51,15 @@ import { formatTimeMs } from '../../core/format';
 import type { LevelDef } from '../../core/levels';
 import { getCampaignLevel } from '../../core/levels';
 import { itemName } from '../../core/itemNames';
+import {
+  applyPerk,
+  PERK_PICK_FRAMES,
+  PERKS,
+  rollPerkChoices,
+  type PerkDef,
+  type PerkId,
+  type PerkState,
+} from '../../core/perks';
 import { generatePattern, pickPattern } from '../../core/patterns';
 import { mulberry32 } from '../../core/prng';
 import type { BombType, BulletKind, ItemType, SpecialWeaponType, WeaponState, WeaponType } from '../../core/types';
@@ -216,6 +225,8 @@ export class GameScene extends BaseScene {
   private speedBoost = 0;
   private rapidFire = false;
   private piercingBullets = false;
+  private pierceBoost = 0;
+  private fireRateBoost = 1;
   private shieldBooster = false;
   private magneticRange = 0;
   private bulletSizeBoost = 0;
@@ -250,6 +261,14 @@ export class GameScene extends BaseScene {
   private vignette!: Phaser.GameObjects.Image;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   private overLayer: Phaser.GameObjects.Container | null = null;
+  /** Level-up perk pick overlay; while non-null the run is frozen. */
+  private perkLayer: Phaser.GameObjects.Container | null = null;
+  private perkChoices: PerkDef[] = [];
+  private perkCountdown = 0;
+  private perkBar: Phaser.GameObjects.Graphics | null = null;
+  private perkBarW = 0;
+  private perkBarX = 0;
+  private perkBarY = 0;
   private shatter!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
   private trailFx!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -324,6 +343,8 @@ export class GameScene extends BaseScene {
     this.speedBoost = 0;
     this.rapidFire = false;
     this.piercingBullets = false;
+    this.pierceBoost = 0;
+    this.fireRateBoost = 1;
     this.shieldBooster = false;
     this.magneticRange = 0;
     this.bulletSizeBoost = 0;
@@ -341,6 +362,12 @@ export class GameScene extends BaseScene {
     // calling setText on a destroyed Text crashes Phaser (null frame data).
     this.barLabels = [];
     this.barTimes = [];
+    // No pick overlay survives a restart: the previous run's layer was
+    // destroyed with the scene display list.
+    this.perkLayer = null;
+    this.perkChoices = [];
+    this.perkCountdown = 0;
+    this.perkBar = null;
   }
 
   private buildViews(): void {
@@ -698,12 +725,10 @@ export class GameScene extends BaseScene {
     if (this.score % SCORE_PER_LEVEL === 0) {
       this.level += 1;
       this.gameSpeed += SPEED_PER_LEVEL;
-      // Level-up pays out instantly so levelling has a tangible reward, not
-      // just faster tiles.
-      this.svc.save.addCoins(LEVEL_UP_COINS);
       this.svc.audio.levelup();
-      this.popText(this.W / 2, this.H * 0.4, `等级 ${this.level} · +${LEVEL_UP_COINS} 金币`, 26, this.COLORS.accent);
-      this.sparks.explode(8, this.W / 2, this.H * 0.4);
+      // Level-up opens a pick-one-of-two perk overlay (run frozen, 8 s
+      // countdown auto-picks) so levelling grants power, not just speed.
+      this.openPerkPick();
     }
 
     if (this.rng() < dropChance(this.difficultyLevel())) {
@@ -717,6 +742,137 @@ export class GameScene extends BaseScene {
     if (this.levelDef && !this.levelDef.boss && !this.victoryStarted && this.score >= this.levelDef.targetKills) {
       this.startVictory();
     }
+  }
+
+  // ============================================================================
+  // level-up perk pick
+  // ============================================================================
+
+  /** Current run state as the perk pool/apply logic sees it. */
+  private perkState(): PerkState {
+    return {
+      fireRateBoost: this.fireRateBoost,
+      bulletSizeBoost: this.bulletSizeBoost,
+      pierceBoost: this.pierceBoost,
+      speedBoost: this.speedBoost,
+      weaponDurationBoost: this.weaponDurationBoost,
+      shield: this.shield,
+      shieldDuration: this.shieldDuration,
+    };
+  }
+
+  private syncPerkState(s: PerkState): void {
+    this.fireRateBoost = s.fireRateBoost;
+    this.bulletSizeBoost = s.bulletSizeBoost;
+    this.pierceBoost = s.pierceBoost;
+    this.speedBoost = s.speedBoost;
+    this.weaponDurationBoost = s.weaponDurationBoost;
+    this.shield = s.shield;
+    this.shieldDuration = s.shieldDuration;
+    this.shieldRing.setVisible(this.shield);
+  }
+
+  /**
+   * Freeze the run and offer two random perks; the 8 s countdown bar at the
+   * top of the panel auto-picks a random one when it empties.
+   */
+  private openPerkPick(): void {
+    if (this.perkLayer) return;
+    const choices = rollPerkChoices(this.perkState(), this.rng);
+    if (choices.length === 0) {
+      this.popText(this.W / 2, this.H * 0.4, `等级 ${this.level}`, 26, this.COLORS.accent);
+      return;
+    }
+    this.perkChoices = choices;
+    this.perkCountdown = PERK_PICK_FRAMES;
+
+    const cx = this.W / 2;
+    const panelW = 460;
+    const cardH = 96;
+    const panelH = 118 + choices.length * (cardH + 16);
+    const cy = this.H / 2;
+    const layer = this.add.container(0, 0).setDepth(DEPTH.modal);
+
+    const dim = this.add.rectangle(cx, cy, this.W, this.H, 0x000000, 0.45).setInteractive();
+    layer.add(dim);
+
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.25);
+    g.fillRoundedRect(cx - panelW / 2, cy - panelH / 2 + 8, panelW, panelH, 24);
+    g.fillStyle(this.COLORS.panel, 1);
+    g.fillRoundedRect(cx - panelW / 2, cy - panelH / 2, panelW, panelH, 24);
+    g.lineStyle(2, 0xffffff, 0.6);
+    g.strokeRoundedRect(cx - panelW / 2, cy - panelH / 2, panelW, panelH, 24);
+    layer.add(g);
+
+    layer.add(this.text(cx, cy - panelH / 2 + 38, `等级 ${this.level} · 选择强化`, { size: 24, bold: true }));
+
+    // Countdown bar: drains over PERK_PICK_FRAMES, then auto-picks.
+    this.perkBarW = panelW - 80;
+    this.perkBarX = cx;
+    this.perkBarY = cy - panelH / 2 + 66;
+    const barBg = this.add.graphics();
+    barBg.fillStyle(0x000000, 0.12);
+    barBg.fillRoundedRect(cx - this.perkBarW / 2, this.perkBarY, this.perkBarW, 10, 5);
+    layer.add(barBg);
+    this.perkBar = this.add.graphics();
+    layer.add(this.perkBar);
+    this.drawPerkBar();
+
+    choices.forEach((perk, i) => {
+      const y = cy - panelH / 2 + 96 + i * (cardH + 16) + cardH / 2;
+      layer.add(this.buildPerkCard(perk, cx, y, panelW - 48, cardH));
+    });
+
+    layer.setAlpha(0);
+    this.tweens.add({ targets: layer, alpha: 1, duration: 160, ease: 'Quad.easeOut' });
+    this.perkLayer = layer;
+  }
+
+  private drawPerkBar(): void {
+    if (!this.perkBar) return;
+    const ratio = Phaser.Math.Clamp(this.perkCountdown / PERK_PICK_FRAMES, 0, 1);
+    this.perkBar.clear();
+    this.perkBar.fillStyle(this.COLORS.accent, 1);
+    if (ratio > 0) {
+      this.perkBar.fillRoundedRect(this.perkBarX - this.perkBarW / 2, this.perkBarY, Math.max(10, this.perkBarW * ratio), 10, 5);
+    }
+  }
+
+  private buildPerkCard(perk: PerkDef, x: number, y: number, w: number, h: number): Phaser.GameObjects.Container {
+    const card = this.add.container(x, y);
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.1);
+    g.fillRoundedRect(-w / 2, -h / 2 + 3, w, h, 16);
+    g.fillStyle(0xffffff, 0.92);
+    g.fillRoundedRect(-w / 2, -h / 2, w, h, 16);
+    g.lineStyle(2, this.COLORS.accent, 0.55);
+    g.strokeRoundedRect(-w / 2 + 1, -h / 2 + 1, w - 2, h - 2, 15);
+    card.add(g);
+    card.add(this.text(-w / 2 + 22, -18, perk.name, { size: 20, bold: true, align: 'left', color: this.COLORS.textPrimary }));
+    card.add(this.text(-w / 2 + 22, 14, perk.desc, { size: 14, align: 'left', color: this.COLORS.textSecondary }));
+    card.setSize(w, h);
+    // Container hit area is top-left-anchored (same convention as Button).
+    card.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+    card.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (p.getDistance() > 14) return;
+      this.pickPerk(perk.id);
+    });
+    return card;
+  }
+
+  private pickPerk(id: PerkId): void {
+    if (!this.perkLayer) return;
+    this.perkLayer.destroy();
+    this.perkLayer = null;
+    this.perkChoices = [];
+    this.perkBar = null;
+    const s = applyPerk(this.perkState(), id);
+    this.syncPerkState(s);
+    if (id === 'shield') this.svc.audio.shield();
+    const perk = PERKS.find((p) => p.id === id);
+    this.popText(this.W / 2, this.H * 0.4, `${perk?.name ?? ''}！`, 26, this.COLORS.accent);
+    this.sparks.explode(8, this.W / 2, this.H * 0.4);
   }
 
   // ============================================================================
@@ -1136,7 +1292,7 @@ export class GameScene extends BaseScene {
       radius,
       piercing: this.piercingBullets,
       hitCount: 0,
-      maxHits: this.piercingBullets ? 3 : 1,
+      maxHits: this.piercingBullets ? PIERCING_MAX_HITS + this.pierceBoost : 1 + this.pierceBoost,
       damage,
       active: true,
       view,
@@ -1217,7 +1373,7 @@ export class GameScene extends BaseScene {
         }
       }
 
-      w.cooldown = weaponCooldown(type, w.level, this.rapidFire);
+      w.cooldown = Math.max(1, Math.floor(weaponCooldown(type, w.level, this.rapidFire) * this.fireRateBoost));
       shotsFired = true;
     }
 
@@ -1233,6 +1389,17 @@ export class GameScene extends BaseScene {
 
   override update(): void {
     if (!this.playing || this.paused) return;
+    // Perk pick freezes the run; only its countdown keeps ticking (real
+    // frames, so the 8 s budget survives low-fps devices).
+    if (this.perkLayer) {
+      this.perkCountdown--;
+      this.drawPerkBar();
+      if (this.perkCountdown <= 0) {
+        const pick = this.perkChoices[Math.floor(this.rng() * this.perkChoices.length)];
+        if (pick) this.pickPerk(pick.id);
+      }
+      return;
+    }
     this.elapsedFrames++;
     // Boss levels: an escort wave every ~4 s until the boss goes down.
     if (this.boss && !this.victoryStarted && this.elapsedFrames % ESCORT_WAVE_FRAMES === 0) {
@@ -1323,6 +1490,7 @@ export class GameScene extends BaseScene {
       if (this.shieldDuration <= 0) this.shield = false;
     }
     this.shieldRing.setVisible(this.shield);
+    // A shield granted while the run was frozen (perk pick) needs one paint.
     if (this.shield) this.shieldRing.setAlpha(this.shieldDuration < 60 ? 0.4 + 0.6 * Math.abs(Math.sin(this.shieldDuration * 0.2)) : 0.9);
 
     if (this.globalCooldown > 0) this.globalCooldown--;
@@ -1693,6 +1861,8 @@ export class GameScene extends BaseScene {
 
   private exitToHome(): void {
     this.finalizeRun();
+    this.perkLayer?.destroy();
+    this.perkLayer = null;
     this.go(this.mode === 'level' ? 'LevelSelectScene' : this.mode === 'daily' ? 'DailyScene' : 'HomeScene');
   }
 
@@ -1811,9 +1981,6 @@ export class GameScene extends BaseScene {
       }),
     );
     if (coins > 0) modal.panel.add(this.text(0, 14, `+${coins} 金币`, { size: 16, bold: true, color: 0xcc8800 }));
-    if (bonus.length > 0) {
-      modal.panel.add(this.text(0, 42, `🏆 解锁成就：${bonus.map((a) => a.name).join('、')}`, { size: 13, bold: true, color: this.COLORS.accent, wrap: 360 }));
-    }
 
     const buttons: Button[] = [];
     if (hasNext) {
@@ -1843,6 +2010,9 @@ export class GameScene extends BaseScene {
     }
     modal.panel.add(buttons);
     this.overLayer = modal;
+    if (bonus.length > 0) {
+      this.time.delayedCall(450, () => this.showAchievementCards(bonus, modal.panelHeight));
+    }
   }
 
   private defeat(): void {
@@ -1850,7 +2020,7 @@ export class GameScene extends BaseScene {
     if (this.mode === 'daily') this.svc.save.recordDailyResult(this.dateKey, 0, this.elapsedMs(), this.score);
     this.finalized = true;
     this.svc.audio.gameover();
-    this.checkAndGrantAchievements({ mode: this.mode, stars: 0 });
+    const bonus = this.checkAndGrantAchievements({ mode: this.mode, stars: 0 });
 
     const modal = new Modal(this, this.W, this.H, { width: 400, height: 430, title: '挑战失败' });
     const icon = this.add.container(0, -112);
@@ -1877,6 +2047,9 @@ export class GameScene extends BaseScene {
       }),
     ]);
     this.overLayer = modal;
+    if (bonus.length > 0) {
+      this.time.delayedCall(450, () => this.showAchievementCards(bonus, modal.panelHeight));
+    }
   }
 
   private endlessGameOver(): void {
@@ -1914,12 +2087,71 @@ export class GameScene extends BaseScene {
     modal.panel.add(this.text(0, 24, `等级 Lv${this.level} · 消灭瓦片 ${this.score}`, { size: 15, color: this.COLORS.textSecondary }));
     modal.panel.add(this.text(0, 52, `历史最高 ${this.svc.save.get().highScore}`, { size: 13, color: this.COLORS.textSecondary }));
     if (coins > 0) modal.panel.add(this.text(0, 80, `+${coins} 金币`, { size: 15, bold: true, color: 0xcc8800 }));
-    if (bonus.length > 0) {
-      modal.panel.add(this.text(0, 106, `🏆 解锁成就：${bonus.map((a) => a.name).join('、')}`, { size: 13, bold: true, color: this.COLORS.accent, wrap: 360 }));
-    }
     const again = new Button(this, 0, 148, { label: '再来一局', width: 280, height: 62, onClick: () => this.refresh() });
     const home = new Button(this, 0, 224, { label: '返回主页', variant: 'secondary', width: 280, height: 56, onClick: () => this.go('HomeScene') });
     modal.panel.add([again, home]);
     this.overLayer = modal;
+    if (bonus.length > 0) {
+      this.time.delayedCall(450, () => this.showAchievementCards(bonus, modal.panelHeight));
+    }
+  }
+
+  /**
+   * Achievement unlock cards in their own floating panel BELOW the result
+   * modal — they used to be one 13 px line squeezed between the modal's rows
+   * and buttons, unreadable. Tap anywhere on the panel to dismiss it; it
+   * auto-dismisses after ~6 s, and dies with the modal (display-list destroy).
+   */
+  private showAchievementCards(defs: AchievementDef[], modalHeight: number): void {
+    if (!this.overLayer?.scene) return; // player already left the modal
+    const cardW = 380;
+    const rowH = 44;
+    const panelH = 62 + defs.length * rowH;
+    const cx = this.W / 2;
+    // Below the modal, but never closer than 24 px to the screen bottom.
+    const topY = Math.min(this.H / 2 + modalHeight / 2 + 14, this.H - panelH - 24);
+    const cy = topY + panelH / 2;
+
+    const layer = this.add.container(0, 0).setDepth(DEPTH.toast);
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.22);
+    g.fillRoundedRect(cx - cardW / 2, topY + 5, cardW, panelH, 18);
+    g.fillStyle(this.COLORS.panel, 1);
+    g.fillRoundedRect(cx - cardW / 2, topY, cardW, panelH, 18);
+    g.lineStyle(2, 0xffb703, 0.8);
+    g.strokeRoundedRect(cx - cardW / 2 + 1, topY + 1, cardW - 2, panelH - 2, 17);
+    layer.add(g);
+    layer.add(this.text(cx, topY + 28, '🏆 解锁成就', { size: 17, bold: true, color: this.COLORS.accent }));
+
+    defs.forEach((def, i) => {
+      const my = topY + 52 + i * rowH + rowH / 2 - 6;
+      const mx = cx - cardW / 2 + 34;
+      const medal = this.add.graphics();
+      medal.fillStyle(0xffb703, 1);
+      medal.fillCircle(mx, my, 14);
+      medal.fillStyle(0xcc8800, 1);
+      medal.fillCircle(mx, my, 8);
+      layer.add(medal);
+      layer.add(this.text(mx, my - 1, '✓', { size: 13, bold: true, color: 0xffffff }));
+      layer.add(this.text(mx + 26, my - 10, def.name, { size: 16, bold: true, align: 'left', color: this.COLORS.textPrimary }));
+      layer.add(this.text(mx + 26, my + 10, `+${def.reward} 金币`, { size: 12, align: 'left', color: 0xcc8800 }));
+    });
+
+    // Tap to dismiss early.
+    const zone = this.add.zone(cx, cy, cardW, panelH).setInteractive();
+    zone.on('pointerup', () => dismiss());
+    layer.add(zone);
+
+    layer.setAlpha(0);
+    layer.y = 24;
+    this.tweens.add({ targets: layer, alpha: 1, y: 0, duration: 240, ease: 'Back.easeOut' });
+    let dismissed = false;
+    const dismiss = (): void => {
+      if (dismissed || !layer.scene) return;
+      dismissed = true;
+      this.tweens.killTweensOf(layer);
+      this.tweens.add({ targets: layer, alpha: 0, y: 12, duration: 160, onComplete: () => layer.destroy() });
+    };
+    this.time.delayedCall(6000, dismiss);
   }
 }

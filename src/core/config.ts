@@ -20,8 +20,7 @@ export const MAX_LIVES = 9;
 export const INVINCIBLE_FRAMES = 120;
 export const SCORE_PER_LEVEL = 8;
 export const SPEED_PER_LEVEL = 0.09;
-/** Instant coin grant on each in-run level-up so levelling feels rewarding. */
-export const LEVEL_UP_COINS = 2;
+// Level-ups grant a pick-one-of-two perk instead of coins (see core/perks.ts).
 
 // --- player ------------------------------------------------------------------
 export const PLAYER_WIDTH = 40;

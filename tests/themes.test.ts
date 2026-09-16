@@ -107,8 +107,12 @@ describe('resolvePlayerSprite fallback chain', () => {
     expect(resolvePlayerSprite('lava', available('player-sky'))).toBeNull();
   });
 
-  it('the base edition (sky) always uses the procedural yellow block', () => {
-    expect(resolvePlayerSprite('sky', available('player-sky'))).toBeNull();
+  it('the base edition (sky) uses the naive AI yellow block when it loads', () => {
+    expect(resolvePlayerSprite('sky', available('player-sky'))).toBe('player-sky');
+  });
+
+  it('the base edition (sky) falls back to the procedural yellow block when its sprite is missing', () => {
+    expect(resolvePlayerSprite('sky', available())).toBeNull();
   });
 
   it('returns null (procedural fallback) when every sprite is missing', () => {

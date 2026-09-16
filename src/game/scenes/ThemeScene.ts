@@ -90,17 +90,20 @@ export class ThemeScene extends BaseScene {
     // masked to the rounded card top), else the two-band gradient above.
     const bgKey = resolveThemeBg(theme.id, (key) => this.textures.exists(key) && !this.failedSprites.has(key));
     if (bgKey) {
-      const img = this.add.image(x, y - CARD_H / 2 + PREVIEW_H / 2, bgKey);
+      // Add to the card (not the scene) so the character preview draws on top.
+      const img = this.add.image(0, -CARD_H / 2 + PREVIEW_H / 2, bgKey);
       img.setScale(Math.max((CARD_W - 6) / img.width, (PREVIEW_H - 6) / img.height));
       const maskG = this.make.graphics({ x: 0, y: 0 }, false);
       maskG.fillRoundedRect(x - CARD_W / 2 + 3, y - CARD_H / 2 + 3, CARD_W - 6, PREVIEW_H - 6, { tl: 15, tr: 15, bl: 0, br: 0 });
       img.setMask(maskG.createGeometryMask());
+      card.add(img);
     }
 
-    // Character sprite preview; the base edition (sky) previews the v1
-    // procedural yellow block, other themes fall back to an octagon while
-    // their art is missing.
-    const hasSprite = theme.id !== 'sky' && this.textures.exists(theme.sprite) && !this.failedSprites.has(theme.sprite);
+    // Character sprite preview; each theme shows its own sprite when loaded.
+    // The base edition (sky) previews the naive AI yellow block when present,
+    // else the v1 procedural yellow block; other themes fall back to an
+    // octagon while their art is missing.
+    const hasSprite = this.textures.exists(theme.sprite) && !this.failedSprites.has(theme.sprite);
     if (hasSprite) {
       card.add(this.add.image(0, -CARD_H / 2 + PREVIEW_H / 2, theme.sprite).setDisplaySize(76, 76));
     } else if (theme.id === 'sky') {

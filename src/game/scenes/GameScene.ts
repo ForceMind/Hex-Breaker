@@ -26,12 +26,13 @@ import {
   PLAYER_HEIGHT,
   PLAYER_SPEED,
   PLAYER_WIDTH,
-  SCORE_PER_LEVEL,
   SHAPED_ROW_CHANCE,
   SHAPED_ROW_MIN_LEVEL,
   SHIELD_FRAMES,
   SPEED_BOOST_STEP,
   SPEED_PER_LEVEL,
+  levelUpKillsNeeded,
+  PERK_MIN_INTERVAL_FRAMES,
   START_LIVES,
   STRONG_SHIELD_FRAMES,
   TILE_SIZE,
@@ -208,6 +209,8 @@ export class GameScene extends BaseScene {
   private finalized = false;
   private score = 0;
   private level = 1;
+  private killsSinceLevelup = 0;
+  private framesSincePerk = PERK_MIN_INTERVAL_FRAMES; // start ready so L1 first pick isn't delayed
   private gameSpeed = 1;
   private lives = START_LIVES;
   private currentPattern: string = FULL_ROW_NAME;
@@ -266,6 +269,7 @@ export class GameScene extends BaseScene {
   private overLayer: Phaser.GameObjects.Container | null = null;
   /** Level-up perk pick overlay; while non-null the run is frozen. */
   private perkLayer: Phaser.GameObjects.Container | null = null;
+  private perkPending = false;
   private perkChoices: PerkDef[] = [];
   private perkCountdown = 0;
   private perkBar: Phaser.GameObjects.Graphics | null = null;
@@ -316,6 +320,8 @@ export class GameScene extends BaseScene {
   private resetRun(): void {
     this.score = 0;
     this.level = 1;
+    this.killsSinceLevelup = 0;
+    this.framesSincePerk = PERK_MIN_INTERVAL_FRAMES;
     this.gameSpeed = 1;
     this.lives = START_LIVES;
     this.currentPattern = FULL_ROW_NAME;
@@ -370,6 +376,7 @@ export class GameScene extends BaseScene {
     // No pick overlay survives a restart: the previous run's layer was
     // destroyed with the scene display list.
     this.perkLayer = null;
+    this.perkPending = false;
     this.perkChoices = [];
     this.perkCountdown = 0;
     this.perkBar = null;
@@ -763,13 +770,16 @@ export class GameScene extends BaseScene {
       this.cameras.main.shake(60, 0.0015);
     }
 
-    if (this.score % SCORE_PER_LEVEL === 0) {
+    this.killsSinceLevelup += 1;
+    if (this.killsSinceLevelup >= levelUpKillsNeeded(this.level)) {
+      this.killsSinceLevelup = 0;
       this.level += 1;
       this.gameSpeed += SPEED_PER_LEVEL;
       this.svc.audio.levelup();
-      // Level-up opens a pick-one-of-two perk overlay (run frozen, 8 s
-      // countdown auto-picks) so levelling grants power, not just speed.
-      this.openPerkPick();
+      // Rapid fire can chain level-ups within seconds; hold the pick until
+      // the minimum interval has passed so the run is never spam-frozen.
+      this.perkPending = true;
+      this.tryOpenPerkPick();
     }
 
     if (this.rng() < dropChance(this.difficultyLevel())) {
@@ -817,6 +827,15 @@ export class GameScene extends BaseScene {
    * Freeze the run and offer two random perks; the 8 s countdown bar at the
    * top of the panel auto-picks a random one when it empties.
    */
+  /** Open the perk pick only if the min interval has elapsed; else stay pending. */
+  private tryOpenPerkPick(): void {
+    if (!this.perkPending || this.perkLayer) return;
+    if (this.framesSincePerk < PERK_MIN_INTERVAL_FRAMES) return;
+    this.perkPending = false;
+    this.framesSincePerk = 0;
+    this.openPerkPick();
+  }
+
   private openPerkPick(): void {
     if (this.perkLayer) return;
     const choices = rollPerkChoices(this.perkState(), this.rng);
@@ -1457,6 +1476,9 @@ export class GameScene extends BaseScene {
       return;
     }
     this.elapsedFrames++;
+    if (this.framesSincePerk < PERK_MIN_INTERVAL_FRAMES) this.framesSincePerk++;
+    // A level-up held back by the interval gate opens as soon as it clears.
+    this.tryOpenPerkPick();
     // Boss levels: an escort wave every ~4 s until the boss goes down.
     if (this.boss && !this.victoryStarted && this.elapsedFrames % ESCORT_WAVE_FRAMES === 0) {
       this.spawnEscortWave();

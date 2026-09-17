@@ -5,7 +5,7 @@ import {
   ITEM_UNLOCK_TIERS,
   PERK_MAX_BULLET_COLUMNS,
 } from '../src/core/config';
-import { availableItems, dropChance, weaponBaseCooldown, weaponCooldown, weaponDuration } from '../src/core/config';
+import { availableItems, dropChance, LEVEL_UP_KILLS_BASE, LEVEL_UP_KILLS_CAP, levelUpKillsNeeded, weaponBaseCooldown, weaponCooldown, weaponDuration } from '../src/core/config';
 import type { BombType } from '../src/core/types';
 
 describe('item unlock table', () => {
@@ -123,5 +123,17 @@ describe('bomb params', () => {
   it('all five bomb types are present', () => {
     const types: BombType[] = ['normal', 'big', 'diagonal', 'horizontal', 'line'];
     for (const t of types) expect(BOMB_PARAMS[t]).toBeDefined();
+  });
+});
+
+describe('levelUpKillsNeeded', () => {
+  it('ramps from the base and caps', () => {
+    expect(levelUpKillsNeeded(1)).toBe(LEVEL_UP_KILLS_BASE);
+    expect(levelUpKillsNeeded(2)).toBe(LEVEL_UP_KILLS_BASE + 2);
+    expect(levelUpKillsNeeded(3)).toBe(LEVEL_UP_KILLS_BASE + 4);
+    expect(levelUpKillsNeeded(100)).toBe(LEVEL_UP_KILLS_CAP);
+  });
+  it('is monotonically non-decreasing', () => {
+    for (let l = 2; l <= 40; l++) expect(levelUpKillsNeeded(l)).toBeGreaterThanOrEqual(levelUpKillsNeeded(l - 1));
   });
 });

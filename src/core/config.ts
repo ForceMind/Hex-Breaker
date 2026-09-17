@@ -18,8 +18,16 @@ export const START_LIVES = 3;
 export const MAX_LIVES = 9;
 /** Invincibility (granted as a temporary shield) after losing a life. */
 export const INVINCIBLE_FRAMES = 120;
-export const SCORE_PER_LEVEL = 8;
 export const SPEED_PER_LEVEL = 0.09;
+/** Kills needed to go from `level` to `level+1`: ramps 10, 12, 14 … capped. */
+export function levelUpKillsNeeded(level: number): number {
+  return Math.min(LEVEL_UP_KILLS_BASE + (level - 1) * LEVEL_UP_KILLS_STEP, LEVEL_UP_KILLS_CAP);
+}
+export const LEVEL_UP_KILLS_BASE = 12;
+export const LEVEL_UP_KILLS_STEP = 2;
+export const LEVEL_UP_KILLS_CAP = 28;
+/** Minimum frames between two perk picks (12 s), so rapid fire can't spam. */
+export const PERK_MIN_INTERVAL_FRAMES = 720;
 // Level-ups grant a pick-one-of-two perk instead of coins (see core/perks.ts).
 
 // --- player ------------------------------------------------------------------

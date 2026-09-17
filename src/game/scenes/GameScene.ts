@@ -744,9 +744,9 @@ export class GameScene extends BaseScene {
   private updateTileView(t: TileRec): void {
     const thickness = Math.min(Math.max(t.health, 1), 8);
     t.img.setTexture(tileTexture(thickness));
-    const layerDepth = (thickness - 1) * 3;
-    // The number sits on the top layer, which steps up-left.
-    t.label.setPosition(-layerDepth, -layerDepth);
+    // The baked top face is centered in its container; stack thickness only
+    // extends lower-right. The number must stay at the top face center.
+    t.label.setPosition(0, 0);
     if (t.health <= 0) return;
     t.label.setText(String(t.health));
     const ratio = t.health / t.maxHealth;

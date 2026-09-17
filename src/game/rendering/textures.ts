@@ -129,12 +129,15 @@ export function ensureTextures(scene: Phaser.Scene): void {
       const c = size / 2;
       const r = TILE_SIZE; // 2x radius of a 50px tile
       for (let layer = n - 1; layer >= 1; layer--) {
-        const depth = layer * 6; // 3px per layer at 1x
-        const lx = c - depth * 0.3;
-        const ly = c - depth * 0.3;
-        g.fillStyle(0x8a8a8a, 1);
+        // One screen pixel per hidden layer (2 texture pixels): even the
+        // 8th layer plus stroke fits, while the lower-right edge still
+        // reads as stacked side thickness rather than a blob.
+        const depth = Math.min(layer * 2, 12);
+        const lx = c + depth * 0.5;
+        const ly = c + depth * 0.5;
+        g.fillStyle(0x666666, 1);
         g.fillPoints(octagonPoints(lx, ly, r), true);
-        g.lineStyle(4, 0x555555, 0.45);
+        g.lineStyle(4, 0x222222, 0.65);
         g.strokePoints(octagonPoints(lx, ly, r), true);
       }
       g.fillStyle(white, 1);

@@ -49,7 +49,7 @@ import { calculatePlayerPower, calculateTileDensity, calculateTileHealthRange, d
 import { campaignCoinReward, COINS_DAILY, endlessCoinReward } from '../../core/economy';
 import { formatTimeMs } from '../../core/format';
 import type { LevelDef } from '../../core/levels';
-import { getCampaignLevel } from '../../core/levels';
+import { getCampaignLevel, levelActIndexAt, levelPatternAt } from '../../core/levels';
 import { itemName } from '../../core/itemNames';
 import {
   applyPerk,
@@ -211,6 +211,9 @@ export class GameScene extends BaseScene {
   private gameSpeed = 1;
   private lives = START_LIVES;
   private currentPattern: string = FULL_ROW_NAME;
+  /** Scripted campaign row/act cursors; reset because scenes are reused. */
+  private scriptedRowIndex = 0;
+  private scriptedActIndex = -1;
   /** Run randomness; seeded in level/daily modes, plain Math.random in endless. */
   private rng: () => number = Math.random;
 
@@ -316,6 +319,8 @@ export class GameScene extends BaseScene {
     this.gameSpeed = 1;
     this.lives = START_LIVES;
     this.currentPattern = FULL_ROW_NAME;
+    this.scriptedRowIndex = 0;
+    this.scriptedActIndex = -1;
     this.finalized = false;
     this.playing = false;
     this.paused = false;
@@ -563,6 +568,15 @@ export class GameScene extends BaseScene {
   // ============================================================================
 
   private spawnInitialRows(): void {
+    // Campaign levels start inside their first scripted act instead of every
+    // run opening with the same three full rows. Endless/daily stay unchanged.
+    if (this.levelDef?.script?.length) {
+      for (let row = 0; row < INITIAL_ROWS; row++) {
+        this.spawnRowAt(row * TILE_SPACING + FIRST_ROW_Y, (INITIAL_ROWS - 1 - row) * 70, true);
+      }
+      this.showScriptActCue(0, true);
+      return;
+    }
     for (let row = 0; row < INITIAL_ROWS; row++) {
       const y = row * TILE_SPACING + FIRST_ROW_Y;
       const startCenterX = (this.W - (this.tilesPerRow - 1) * TILE_SPACING) / 2;
@@ -592,27 +606,51 @@ export class GameScene extends BaseScene {
     }
   }
 
+  /** Show a compact act cue and remember it so every threshold fires once. */
+  private showScriptActCue(actIndex: number, opening = false): void {
+    const act = this.levelDef?.script?.[actIndex];
+    if (!act || actIndex === this.scriptedActIndex) return;
+    this.scriptedActIndex = actIndex;
+    const label = opening ? `第 1 幕 · ${act.name}` : `第 ${actIndex + 1} 幕 · ${act.name}`;
+    this.popText(this.W / 2, 190, label, 22, this.COLORS.accent);
+  }
+
+  /** Advance the campaign choreography when the kill threshold is crossed. */
+  private updateScriptAct(): void {
+    if (!this.levelDef?.script?.length) return;
+    const actIndex = levelActIndexAt(this.levelDef, this.score);
+    if (actIndex !== this.scriptedActIndex) {
+      // Start the new sequence from its first silhouette.
+      this.scriptedRowIndex = 0;
+      this.showScriptActCue(actIndex);
+    }
+  }
+
   /** The level argument fed into the difficulty formulas for this run. */
   private difficultyLevel(): number {
     return this.levelDef ? this.levelDef.virtualLevel : this.level;
   }
 
-  private spawnRowAt(yTop: number): void {
+  private spawnRowAt(yTop: number, basePopDelay = 0, useInitialHealth = false): void {
     const dl = this.difficultyLevel();
-    const useShaped = dl >= SHAPED_ROW_MIN_LEVEL && this.rng() < SHAPED_ROW_CHANCE;
+    const scriptedPattern = this.levelDef ? levelPatternAt(this.levelDef, this.score, this.scriptedRowIndex) : null;
+    if (scriptedPattern) this.scriptedRowIndex += 1;
+    const useShaped = scriptedPattern !== null || (dl >= SHAPED_ROW_MIN_LEVEL && this.rng() < SHAPED_ROW_CHANCE);
     const power = this.playerPower();
     const healthRange = calculateTileHealthRange(power, dl);
     const rollHealth = (): number =>
-      Math.floor(this.rng() * (healthRange.max - healthRange.min + 1)) + healthRange.min;
+      useInitialHealth
+        ? Math.floor(this.rng() * INITIAL_HEALTH_MAX) + 1
+        : Math.floor(this.rng() * (healthRange.max - healthRange.min + 1)) + healthRange.min;
 
     if (useShaped) {
-      const pattern = pickPattern(this.rng);
+      const pattern = scriptedPattern ?? pickPattern(this.rng);
       this.currentPattern = PATTERN_NAMES[pattern];
       const mask = generatePattern(pattern, this.tilesPerRow, this.rng);
       const startCenterX = (this.W - (this.tilesPerRow - 1) * TILE_SPACING) / 2;
       for (let col = 0; col < this.tilesPerRow; col++) {
         if (!mask[col]) continue;
-        this.spawnTile(startCenterX + col * TILE_SPACING, yTop + TILE_SIZE / 2, rollHealth(), col * 20);
+        this.spawnTile(startCenterX + col * TILE_SPACING, yTop + TILE_SIZE / 2, rollHealth(), basePopDelay + col * 20);
       }
     } else {
       this.currentPattern = FULL_ROW_NAME;
@@ -620,7 +658,7 @@ export class GameScene extends BaseScene {
       const count = Math.floor(this.tilesPerRow * density);
       const startCenterX = (this.W - (count - 1) * TILE_SPACING) / 2;
       for (let col = 0; col < count; col++) {
-        this.spawnTile(startCenterX + col * TILE_SPACING, yTop + TILE_SIZE / 2, rollHealth(), col * 20);
+        this.spawnTile(startCenterX + col * TILE_SPACING, yTop + TILE_SIZE / 2, rollHealth(), basePopDelay + col * 20);
       }
     }
   }
@@ -681,7 +719,9 @@ export class GameScene extends BaseScene {
 
   /** Damage a tile; returns true when the tile was destroyed. */
   private damageTile(t: TileRec, amount: number): boolean {
-    if (!t.active) return false;
+    // Once victory begins, the timed clear sequence owns every remaining tile.
+    // Residual bullets/bombs must not score, level up, or reopen a perk picker.
+    if (!t.active || this.victoryStarted) return false;
     t.health -= amount;
     if (t.health > 0) {
       this.updateTileView(t);
@@ -712,6 +752,7 @@ export class GameScene extends BaseScene {
 
   private onTileDestroyed(t: TileRec): void {
     this.score += 1;
+    this.updateScriptAct();
     this.svc.audio.hit();
     this.shatter.explode(10, t.cx, t.cy);
     this.sparks.explode(4 + Math.floor(this.rng() * 3), t.cx, t.cy);
@@ -1904,6 +1945,14 @@ export class GameScene extends BaseScene {
    */
   private startVictory(): void {
     this.victoryStarted = true;
+    // A target can land on the same kill as a level-up (for example L4 at
+    // 64 kills). Victory takes precedence: don't leave the perk picker over
+    // the clear animation/result modal when there is no next wave to use it.
+    this.perkLayer?.destroy();
+    this.perkLayer = null;
+    this.perkChoices = [];
+    this.perkCountdown = 0;
+    this.perkBar = null;
     const remaining = this.tiles.filter((t) => t.active).sort((a, b) => a.cy - b.cy || a.cx - b.cx);
     remaining.forEach((t, i) => {
       this.time.delayedCall(i * 30, () => {

@@ -5,7 +5,7 @@
 import { previousDateKey } from '../core/levels';
 
 export const SAVE_KEY = 'hex-breaker:save';
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 export interface Settings {
   music: boolean;
@@ -39,6 +39,11 @@ export interface Economy {
 
 export const DEFAULT_THEME = 'sky';
 
+export interface OnboardingProgress {
+  /** New installs launch straight into L1 until that first win is complete. */
+  completed: boolean;
+}
+
 export interface SaveData {
   version: number;
   highScore: number;
@@ -53,6 +58,8 @@ export interface SaveData {
   unlockedThemes: string[];
   /** v5: achievement id -> unlock timestamp (ms). Absent id = locked. */
   achievements: Record<string, number>;
+  /** v6: first-run journey state. */
+  onboarding: OnboardingProgress;
 }
 
 export interface StorageLike {
@@ -75,6 +82,7 @@ export function defaultSave(): SaveData {
     selectedTheme: DEFAULT_THEME,
     unlockedThemes: [DEFAULT_THEME],
     achievements: {},
+    onboarding: { completed: false },
   };
 }
 
@@ -126,6 +134,12 @@ export function migrate(raw: unknown): SaveData {
   if (!d.unlockedThemes.includes(DEFAULT_THEME)) d.unlockedThemes.unshift(DEFAULT_THEME);
   d.selectedTheme = typeof raw.selectedTheme === 'string' ? raw.selectedTheme : DEFAULT_THEME;
   if (!d.unlockedThemes.includes(d.selectedTheme)) d.selectedTheme = DEFAULT_THEME;
+  // v6 first-run flow: established saves must not be sent back through L1.
+  // Only a genuinely new v6 save starts the onboarding journey.
+  // A versioned v1-v5 payload belongs to an established player. Empty or
+  // corrupt objects are treated as fresh installs and retain the default false.
+  d.onboarding.completed = typeof raw.version === 'number' && int(raw.version, 6, 1) < 6;
+  if (isObj(raw.onboarding)) d.onboarding.completed = bool(raw.onboarding.completed, d.onboarding.completed);
   // v5 additions; absent in v1-v4 saves, in which case defaults are kept.
   if (isObj(raw.achievements)) {
     for (const [id, value] of Object.entries(raw.achievements)) {
@@ -147,7 +161,8 @@ export function isValidSave(data: SaveData): boolean {
     isObj(data.daily) &&
     isObj(data.economy) &&
     Array.isArray(data.unlockedThemes) &&
-    isObj(data.achievements)
+    isObj(data.achievements) &&
+    isObj(data.onboarding)
   );
 }
 
@@ -266,6 +281,16 @@ export class SaveService {
    * `kills` = tiles destroyed this run; fed into totalTilesDestroyed so the
    * lifetime counter covers campaign runs too (previously endless-only).
    */
+  hasCompletedOnboarding(): boolean {
+    return this.data.onboarding.completed;
+  }
+
+  completeOnboarding(): void {
+    if (this.data.onboarding.completed) return;
+    this.data.onboarding.completed = true;
+    this.save();
+  }
+
   recordCampaignResult(levelId: number, stars: number, timeMs: number, kills = 0): { improved: boolean } {
     const id = Math.max(1, Math.min(30, Math.round(levelId)));
     const s = Math.max(0, Math.min(3, Math.round(stars)));

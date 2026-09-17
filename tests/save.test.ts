@@ -12,6 +12,12 @@ describe('migrate', () => {
     expect(migrate({})).toEqual(defaultSave());
   });
 
+  it('keeps new saves in onboarding and treats versioned legacy saves as completed', () => {
+    expect(defaultSave().onboarding.completed).toBe(false);
+    expect(migrate({ version: 5 }).onboarding.completed).toBe(true);
+    expect(migrate({ version: SAVE_VERSION, onboarding: { completed: false } }).onboarding.completed).toBe(false);
+  });
+
   it('sanitizes partial/corrupt fields', () => {
     const d = migrate({ highScore: 120.7, bestLevel: 0, gamesPlayed: -5, settings: { music: false, sound: 'yes' } });
     expect(d.highScore).toBe(121);
@@ -349,5 +355,17 @@ describe('SaveService', () => {
       expect(svc.get().economy.coins).toBe(50);
       expect(svc.get().selectedTheme).toBe('sunset');
     });
+  });
+});
+
+describe('onboarding progress', () => {
+  it('marks onboarding complete persistently and is idempotent', () => {
+    const storage = memoryStorage();
+    const save = new SaveService(storage);
+    expect(save.hasCompletedOnboarding()).toBe(false);
+    save.completeOnboarding();
+    save.completeOnboarding();
+    expect(save.hasCompletedOnboarding()).toBe(true);
+    expect(new SaveService(storage).hasCompletedOnboarding()).toBe(true);
   });
 });

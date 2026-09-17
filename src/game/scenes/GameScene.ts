@@ -207,6 +207,8 @@ export class GameScene extends BaseScene {
   private playing = false;
   private paused = false;
   private finalized = false;
+  /** True only for a fresh install's first attempt at campaign L1. */
+  private onboardingRun = false;
   private score = 0;
   private level = 1;
   private killsSinceLevelup = 0;
@@ -298,6 +300,7 @@ export class GameScene extends BaseScene {
     this.levelDef = d.mode === 'endless' ? null : d.level;
     this.dateKey = d.mode === 'daily' ? d.dateKey : '';
     this.dailyRewardPending = d.mode === 'daily' && this.svc.save.get().daily.lastPlayedDate !== d.dateKey;
+    this.onboardingRun = d.mode === 'level' && d.level.id === 1 && !this.svc.save.hasCompletedOnboarding();
   }
 
   create(): void {
@@ -311,6 +314,19 @@ export class GameScene extends BaseScene {
     if (this.levelDef?.boss) this.spawnBoss(this.levelDef.boss.hp);
     else this.spawnInitialRows();
     this.playing = true;
+    if (this.onboardingRun) this.scheduleOnboardingHints();
+  }
+
+  /** First-run micro-tutorial: readable but never pauses or blocks controls. */
+  private scheduleOnboardingHints(): void {
+    const hint = (delay: number, message: string): void => {
+      this.time.delayedCall(delay, () => {
+        if (this.playing && !this.overLayer && !this.perkLayer) showToast(this, this.W / 2, this.H * 0.32, message);
+      });
+    };
+    hint(700, '左右滑动或方向键移动飞船');
+    hint(3600, '飞船会自动射击，击碎所有瓦片');
+    hint(8200, '升级时，从两种强化中选一种');
   }
 
   // ============================================================================
@@ -328,6 +344,9 @@ export class GameScene extends BaseScene {
     this.scriptedRowIndex = 0;
     this.scriptedActIndex = -1;
     this.finalized = false;
+    // Phaser reuses the scene instance on restart; discarded result modals
+    // must not suppress first-run hints on a retry.
+    this.overLayer = null;
     this.playing = false;
     this.paused = false;
     this.tiltTween = null;
@@ -2031,6 +2050,7 @@ export class GameScene extends BaseScene {
       const firstClear = !this.svc.save.get().campaign.records[def.id];
       coins = campaignCoinReward(firstClear);
       this.svc.save.recordCampaignResult(def.id, stars, timeMs, this.score);
+      if (this.onboardingRun && def.id === 1) this.svc.save.completeOnboarding();
     } else if (this.mode === 'daily') {
       coins = this.dailyRewardPending ? COINS_DAILY : 0;
       this.svc.save.recordDailyResult(this.dateKey, stars, timeMs, this.score);
@@ -2071,7 +2091,14 @@ export class GameScene extends BaseScene {
     if (coins > 0) modal.panel.add(this.text(0, 14, `+${coins} 金币`, { size: 16, bold: true, color: 0xcc8800 }));
 
     const buttons: Button[] = [];
-    if (hasNext) {
+    if (this.onboardingRun && this.mode === 'level' && def.id === 1) {
+      buttons.push(new Button(this, 0, 112, {
+        label: '进入主界面',
+        width: 280,
+        height: 58,
+        onClick: () => this.go('HomeScene'),
+      }));
+    } else if (hasNext) {
       buttons.push(
         new Button(this, 0, 76, {
           label: `下一关 Lv${def.id + 1}`,

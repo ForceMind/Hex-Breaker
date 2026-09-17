@@ -1,7 +1,9 @@
 import { ASSET_TEX_FAILED_KEY, isOptionalArtKey, optionalArtManifest } from '../config/assets';
 import { themeColors } from '../config/themes';
 import { ensureTextures, tileTexture } from '../rendering/textures';
+import { getCampaignLevel } from '../../core/levels';
 import { BaseScene } from './BaseScene';
+import type { GameSceneData } from './GameScene';
 
 /**
  * Generates every procedural texture, loads the eight optional player-sprite
@@ -45,7 +47,8 @@ export class BootScene extends BaseScene {
     const tryStart = (): void => {
       if (!loaded || !beatDone || started) return;
       started = true;
-      this.scene.start('HomeScene');
+      const firstRun = !this.svc.save.hasCompletedOnboarding();
+      this.scene.start(firstRun ? 'GameScene' : 'HomeScene', firstRun ? ({ mode: 'level', level: getCampaignLevel(1) } satisfies GameSceneData) : undefined);
     };
     this.load.on('complete', () => {
       loaded = true;

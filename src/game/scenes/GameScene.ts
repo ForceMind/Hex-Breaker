@@ -720,6 +720,9 @@ export class GameScene extends BaseScene {
       })
       .setOrigin(0.5);
     const view = this.add.container(cx, cy, [shadow, img, ...(face ? [face] : glaze ? [glaze] : []), label]).setDepth(DEPTH.tiles);
+    // Container children render in list order; explicitly keep gameplay
+    // numerals above opaque AI faces (space meteors must not hide health).
+    view.bringToTop(label);
     // entrance pop: 0.6 -> 1, staggered per column by the caller
     view.setScale(0.6);
     this.tweens.add({ targets: view, scaleX: 1, scaleY: 1, duration: 150, delay: popDelay, ease: 'Quad.easeOut' });

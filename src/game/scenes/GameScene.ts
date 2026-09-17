@@ -209,6 +209,12 @@ export class GameScene extends BaseScene {
   private finalized = false;
   /** True only for a fresh install's first attempt at campaign L1. */
   private onboardingRun = false;
+  /** First-run hints are event-triggered, never a timed text dump. */
+  private onboardingHints = new Set<'move' | 'shoot' | 'perk' | 'perkNudge'>();
+  /** First choice is a teaching pause: no countdown until the player chooses. */
+  private firstPerkTeaching = false;
+  /** Item explanations are shown once per item type per run. */
+  private explainedItems = new Set<ItemType>();
   private score = 0;
   private level = 1;
   private killsSinceLevelup = 0;
@@ -314,19 +320,20 @@ export class GameScene extends BaseScene {
     if (this.levelDef?.boss) this.spawnBoss(this.levelDef.boss.hp);
     else this.spawnInitialRows();
     this.playing = true;
-    if (this.onboardingRun) this.scheduleOnboardingHints();
   }
 
-  /** First-run micro-tutorial: readable but never pauses or blocks controls. */
-  private scheduleOnboardingHints(): void {
-    const hint = (delay: number, message: string): void => {
-      this.time.delayedCall(delay, () => {
-        if (this.playing && !this.overLayer && !this.perkLayer) showToast(this, this.W / 2, this.H * 0.32, message);
-      });
-    };
-    hint(700, '左右滑动或方向键移动飞船');
-    hint(3600, '飞船会自动射击，击碎所有瓦片');
-    hint(8200, '升级时，从两种强化中选一种');
+  /** First-run learning is attached to the action it explains, never dumped by a timer. */
+  private showOnboardingHint(kind: 'move' | 'shoot' | 'perk' | 'perkNudge'): void {
+    if (!this.onboardingRun || this.onboardingHints.has(kind)) return;
+    this.onboardingHints.add(kind);
+    const message = kind === 'move'
+      ? '左右滑动或方向键移动飞船'
+      : kind === 'shoot'
+        ? '飞船会自动射击，击碎所有瓦片'
+        : kind === 'perk'
+          ? '升级了：从两种强化中选一种'
+          : '点击一张强化卡继续';
+    showToast(this, this.W / 2, kind === 'perkNudge' ? this.H * 0.72 : this.H * 0.32, message);
   }
 
   // ============================================================================
@@ -396,6 +403,9 @@ export class GameScene extends BaseScene {
     // destroyed with the scene display list.
     this.perkLayer = null;
     this.perkPending = false;
+    this.onboardingHints.clear();
+    this.firstPerkTeaching = false;
+    this.explainedItems.clear();
     this.perkChoices = [];
     this.perkCountdown = 0;
     this.perkBar = null;
@@ -863,7 +873,14 @@ export class GameScene extends BaseScene {
       return;
     }
     this.perkChoices = choices;
-    this.perkCountdown = PERK_PICK_FRAMES;
+    this.firstPerkTeaching = this.onboardingRun && !this.onboardingHints.has('perk');
+    this.perkCountdown = this.firstPerkTeaching ? 0 : PERK_PICK_FRAMES;
+    if (this.firstPerkTeaching) {
+      this.showOnboardingHint('perk');
+      this.time.delayedCall(3000, () => {
+        if (this.perkLayer && this.firstPerkTeaching) this.showOnboardingHint('perkNudge');
+      });
+    }
 
     const cx = this.W / 2;
     const panelW = 460;
@@ -884,19 +901,23 @@ export class GameScene extends BaseScene {
     g.strokeRoundedRect(cx - panelW / 2, cy - panelH / 2, panelW, panelH, 24);
     layer.add(g);
 
-    layer.add(this.text(cx, cy - panelH / 2 + 38, `等级 ${this.level} · 选择强化`, { size: 24, bold: true }));
+    layer.add(this.text(cx, cy - panelH / 2 + 38, this.firstPerkTeaching ? `等级 ${this.level} · 游戏已暂停` : `等级 ${this.level} · 选择强化`, { size: 24, bold: true }));
 
-    // Countdown bar: drains over PERK_PICK_FRAMES, then auto-picks.
+    // Normal picks show an 8 s auto-pick bar. The first teaching pick has
+    // no timer at all: the player can read and choose without pressure.
     this.perkBarW = panelW - 80;
     this.perkBarX = cx;
     this.perkBarY = cy - panelH / 2 + 66;
-    const barBg = this.add.graphics();
-    barBg.fillStyle(0x000000, 0.12);
-    barBg.fillRoundedRect(cx - this.perkBarW / 2, this.perkBarY, this.perkBarW, 10, 5);
-    layer.add(barBg);
-    this.perkBar = this.add.graphics();
-    layer.add(this.perkBar);
-    this.drawPerkBar();
+    this.perkBar = null;
+    if (!this.firstPerkTeaching) {
+      const barBg = this.add.graphics();
+      barBg.fillStyle(0x000000, 0.12);
+      barBg.fillRoundedRect(cx - this.perkBarW / 2, this.perkBarY, this.perkBarW, 10, 5);
+      layer.add(barBg);
+      this.perkBar = this.add.graphics();
+      layer.add(this.perkBar);
+      this.drawPerkBar();
+    }
 
     choices.forEach((perk, i) => {
       const y = cy - panelH / 2 + 96 + i * (cardH + 16) + cardH / 2;
@@ -944,6 +965,7 @@ export class GameScene extends BaseScene {
     if (!this.perkLayer) return;
     this.perkLayer.destroy();
     this.perkLayer = null;
+    this.firstPerkTeaching = false;
     this.perkChoices = [];
     this.perkBar = null;
     const s = applyPerk(this.perkState(), id);
@@ -1049,9 +1071,11 @@ export class GameScene extends BaseScene {
     glyph.setDisplaySize(ITEM_DROP_SIZE * 0.62, ITEM_DROP_SIZE * 0.62);
     // Name label below the box, always visible while falling (the pickup
     // pop-text alone was too fleeting to learn the item names).
-    const nameLabel = this.add.text(0, ITEM_DROP_SIZE / 2 + 12, itemName(this.themeId, type), {
+    const firstExplain = !this.explainedItems.has(type);
+    if (firstExplain) this.explainedItems.add(type);
+    const nameLabel = this.add.text(0, ITEM_DROP_SIZE / 2 + 12, firstExplain ? `${itemName(this.themeId, type)} · ${this.itemExplanation(type)}` : itemName(this.themeId, type), {
       fontFamily: FONT_FAMILY,
-      fontSize: '13px',
+      fontSize: firstExplain ? '11px' : '13px',
       fontStyle: 'bold',
       color: '#ffffff',
       stroke: '#1a2b3c',
@@ -1068,6 +1092,17 @@ export class GameScene extends BaseScene {
     inner.rotation = -0.06;
     this.tweens.add({ targets: inner, rotation: 0.06, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.items.push({ x: cx, y: cy, type, active: true, view });
+  }
+
+  /** One-line explanation shown the first time this item drops in onboarding. */
+  private itemExplanation(type: ItemType): string {
+    const explanations: Record<ItemType, string> = {
+      uzi: '高速连射', shotgun: '近距离散射', laser: '高伤激光', spread: '宽幅弹幕',
+      bomb: '炸毁周围瓦片', bigbomb: '大范围爆炸', diagonalbomb: '斜向爆炸', horizontalbomb: '横向爆炸', linebomb: '直线爆破',
+      shield: '抵挡一次伤害', boomerang: '往返切割', doublebullets: '额外两发子弹', speedboost: '移动更快', rapidfire: '射速翻倍',
+      piercing: '子弹穿过目标', shieldbooster: '强化护盾', magnet: '吸取更远道具', bigbullets: '子弹多一列', weaponduration: '武器持续更久', extralife: '增加一条生命',
+    };
+    return explanations[type];
   }
 
   private pickupItem(type: ItemType): void {
@@ -1472,6 +1507,7 @@ export class GameScene extends BaseScene {
     }
 
     if (shotsFired) {
+      this.showOnboardingHint('shoot');
       this.globalCooldown = GLOBAL_SHOT_COOLDOWN;
       this.svc.audio.shoot();
     }
@@ -1486,6 +1522,7 @@ export class GameScene extends BaseScene {
     // Perk pick freezes the run; only its countdown keeps ticking (real
     // frames, so the 8 s budget survives low-fps devices).
     if (this.perkLayer) {
+      if (this.firstPerkTeaching) return;
       this.perkCountdown--;
       this.drawPerkBar();
       if (this.perkCountdown <= 0) {
@@ -1546,6 +1583,7 @@ export class GameScene extends BaseScene {
     // Tilt into the motion (+-0.08 rad); ease back to level when idle.
     const vx = this.px - prevX;
     if (vx !== 0) {
+      this.showOnboardingHint('move');
       if (this.tiltTween) {
         this.tweens.killTweensOf(this.playerView);
         this.tiltTween = null;
@@ -1736,6 +1774,24 @@ export class GameScene extends BaseScene {
     this.bombs = this.bombs.filter((b) => b.active);
   }
 
+  /** Make each ghost-bullet pass visible: violet ghost ring, shockwave and count. */
+  private showPierceFeedback(b: BulletRec, x: number, y: number): void {
+    const ghost = this.add.image(b.x, b.y, TEX.ring).setTint(0x9b7bff).setAlpha(0.65).setScale(0.18).setDepth(DEPTH.effects);
+    this.tweens.add({
+      targets: ghost,
+      x: b.x - b.angleOffset * 18,
+      y: b.y + 20,
+      scaleX: 0.7,
+      scaleY: 0.7,
+      alpha: 0,
+      duration: 180,
+      ease: 'Quad.easeOut',
+      onComplete: () => ghost.destroy(),
+    });
+    this.shockwave(x, y, 0.75, 160, 0x9b7bff);
+    this.popText(x, y - 26, `穿透 ${b.hitCount}/${b.maxHits}`, 14, 0x9b7bff);
+  }
+
   private checkBulletTileCollisions(): void {
     for (const b of this.bullets) {
       if (!b.active) continue;
@@ -1746,6 +1802,7 @@ export class GameScene extends BaseScene {
         if (Math.sqrt(dx * dx + dy * dy) < b.radius + TILE_SIZE / 2) {
           if (b.piercing && b.hitCount < b.maxHits) {
             b.hitCount++;
+            this.showPierceFeedback(b, t.cx, t.cy);
           } else {
             b.active = false;
             b.view.destroy();
@@ -1762,6 +1819,7 @@ export class GameScene extends BaseScene {
         if (Math.sqrt(dx * dx + dy * dy) < b.radius + BOSS_HALF) {
           if (b.piercing && b.hitCount < b.maxHits) {
             b.hitCount++;
+            this.showPierceFeedback(b, boss.view.x, boss.view.y);
           } else {
             b.active = false;
             b.view.destroy();

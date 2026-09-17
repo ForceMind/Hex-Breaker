@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { css, FONT_FAMILY } from '../config/layout';
-import { themeColors } from '../config/themes';
+import { contrastInk, themeColors } from '../config/themes';
 import { services } from '../services';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -49,7 +49,9 @@ export class Button extends Phaser.GameObjects.Container {
     };
     const texts: Record<ButtonVariant, number> = {
       primary: COLORS.buttonText,
-      secondary: COLORS.textPrimary,
+      // Secondary/ghost buttons sit on `buttonSecondary`; pick ink that
+      // actually contrasts with that surface (dark themes use a pale chip).
+      secondary: contrastInk(COLORS.buttonSecondary, COLORS.panelText, COLORS.textPrimary),
       ghost: COLORS.accent,
       danger: 0xffffff,
     };

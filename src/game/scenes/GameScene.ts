@@ -507,9 +507,9 @@ export class GameScene extends BaseScene {
     // HUD: capsule chips for score / level, merged info line below them.
     const hudDepth = DEPTH.hud;
     this.scoreChipG = this.add.graphics().setDepth(hudDepth);
-    this.scoreChipT = this.text(30, 30, '', { size: 18, bold: true, align: 'left' }).setDepth(hudDepth);
+    this.scoreChipT = this.text(30, 30, '', { size: 18, bold: true, align: 'left', color: this.COLORS.panelText }).setDepth(hudDepth);
     this.levelChipG = this.add.graphics().setDepth(hudDepth);
-    this.levelChipT = this.text(28, 66, '', { size: 14, bold: true, align: 'left' }).setDepth(hudDepth);
+    this.levelChipT = this.text(28, 66, '', { size: 14, bold: true, align: 'left', color: this.COLORS.panelText }).setDepth(hudDepth);
     this.hudInfo = this.text(20, 100, '', { size: 12, color: this.COLORS.textSecondary, align: 'left' }).setDepth(hudDepth);
 
     new Button(this, this.W - 34, 32, {

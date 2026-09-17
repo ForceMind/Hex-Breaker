@@ -298,3 +298,16 @@ export function resolveThemeBg(themeId: string, available: (key: string) => bool
   const key = themeBgKey(themeId);
   return available(key) ? key : null;
 }
+
+/**
+ * Legible ink (dark or light) for text painted over a themed background
+ * colour. Uses WCAG relative-luminance approximation; threshold 0.58 keeps
+ * the palette's existing contrast choices stable.
+ */
+export function contrastInk(bg: number, dark: number, light: number): number {
+  const r = (bg >> 16) & 0xff;
+  const g = (bg >> 8) & 0xff;
+  const b = bg & 0xff;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.58 ? dark : light;
+}

@@ -78,8 +78,8 @@ export class LeaderboardScene extends BaseScene {
     }
     const rankColor = row.rank <= 3 ? 0xcc8800 : COLORS.textSecondary;
     this.text(cardX + 22, midY, String(row.rank), { size: 15, bold: row.rank <= 3, color: rankColor, align: 'left' });
-    this.text(cardX + 62, midY, row.isPlayer ? `${row.name}（我）` : row.name, { size: 15, bold: row.isPlayer ?? false, align: 'left' });
-    this.text(cardX + cardW - 22, midY, String(row.score), { size: 15, bold: row.isPlayer ?? false, align: 'right' });
+    this.text(cardX + 62, midY, row.isPlayer ? `${row.name}（我）` : row.name, { size: 15, bold: row.isPlayer ?? false, align: 'left', color: COLORS.panelText });
+    this.text(cardX + cardW - 22, midY, String(row.score), { size: 15, bold: row.isPlayer ?? false, align: 'right', color: COLORS.panelText });
   }
 
   private updateCountdown(): void {

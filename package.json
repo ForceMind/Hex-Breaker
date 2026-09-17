@@ -1,6 +1,6 @@
 {
   "name": "hex-breaker",
-  "version": "2.11.4",
+  "version": "2.11.5",
   "private": true,
   "type": "module",
   "description": "瓦片破坏者 Hex Breaker — Phaser 3 + TypeScript 的 H5 无尽街机射击游戏",

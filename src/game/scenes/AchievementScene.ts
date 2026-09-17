@@ -136,14 +136,14 @@ export class AchievementScene extends BaseScene {
     if (isDone) row.add(this.text(mx, my - 1, '✓', { size: 17, bold: true, color: 0xffffff }));
 
     const tx = CARD_X + 66;
-    row.add(this.text(tx, y + 20, def.name, { size: 17, bold: true, align: 'left', color: isDone ? COLORS.textPrimary : 0x5a6a7a }));
-    row.add(this.text(tx, y + 45, def.description, { size: 12, align: 'left', color: isDone ? COLORS.textSecondary : 0x8a97a5 }));
+    row.add(this.text(tx, y + 20, def.name, { size: 17, bold: true, align: 'left', color: isDone ? COLORS.panelText : 0x5a6a7a }));
+    row.add(this.text(tx, y + 45, def.description, { size: 12, align: 'left', color: isDone ? COLORS.panelText : 0x8a97a5, alpha: isDone ? 0.7 : 1 }));
 
     // Right side: reward (locked) or unlock date (done).
     if (isDone) {
       const d = new Date(unlockedAt);
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      row.add(this.text(CARD_X + cardW - 16, y + ROW_H / 2, dateStr, { size: 12, align: 'right', color: COLORS.textSecondary }));
+      row.add(this.text(CARD_X + cardW - 16, y + ROW_H / 2, dateStr, { size: 12, align: 'right', color: COLORS.panelText, alpha: 0.65 }));
     } else {
       const rg = this.add.graphics();
       rg.fillStyle(0xffb703, 0.85);

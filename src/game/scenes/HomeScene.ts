@@ -24,7 +24,7 @@ export class HomeScene extends BaseScene {
     const nextLevel = Math.min(save.campaign.unlockedLevel, 30);
 
     // Coin badge, top-right: gold disc + current balance in a capsule.
-    const badgeText = this.text(0, 0, String(save.economy.coins), { size: 15, bold: true, align: 'left' });
+    const badgeText = this.text(0, 0, String(save.economy.coins), { size: 15, bold: true, align: 'left', color: COLORS.panelText });
     const badgeW = badgeText.width + 90; // extra room for the '+' recharge chip
     const badge = this.add.container(this.W - 16 - badgeW, 16);
     const bg = this.add.graphics();
@@ -76,8 +76,8 @@ export class HomeScene extends BaseScene {
       g.fillRoundedRect(-95, -37, 190, 84, 22);
       g.fillStyle(0xffffff, 0.85);
       g.fillRoundedRect(-95, -42, 190, 84, 22);
-      const l = this.text(0, -16, label, { size: 14, color: COLORS.textSecondary });
-      const v = this.text(0, 14, value, { size: 30, bold: true });
+      const l = this.text(0, -16, label, { size: 14, color: COLORS.panelText, alpha: 0.65 });
+      const v = this.text(0, 14, value, { size: 30, bold: true, color: COLORS.panelText });
       c.add([g, l, v]);
       return c;
     };

@@ -57,7 +57,7 @@ export function openRechargeModal(scene: BaseScene, designW: number, designH: nu
     g.fillStyle(0xcc8800, 1);
     g.fillCircle(0, -26, 8);
 
-    card.add(scene.text(0, 6, `${pack.coins} 金币`, { size: 18, bold: true }));
+    card.add(scene.text(0, 6, `${pack.coins} 金币`, { size: 18, bold: true, color: themeColors().panelText }));
     if (pack.tag) {
       const tagG = scene.add.graphics();
       tagG.fillStyle(COLORS.danger, 1);
@@ -83,7 +83,7 @@ export function openRechargeModal(scene: BaseScene, designW: number, designH: nu
   function startFakePayment(pack: RechargePack): void {
     modal.close();
     const pay = new Modal(scene, designW, designH, { width: 360, height: 300, title: '模拟支付' });
-    pay.panel.add(scene.text(0, -66, `${pack.coins} 金币`, { size: 24, bold: true }));
+    pay.panel.add(scene.text(0, -66, `${pack.coins} 金币`, { size: 24, bold: true, color: themeColors().panelText }));
     pay.panel.add(scene.text(0, -30, `应付 ¥${pack.price}（模拟）`, { size: 15, color: COLORS.textSecondary }));
     const spinner = scene.text(0, 22, '支付中…', { size: 16, bold: true, color: COLORS.accent });
     pay.panel.add(spinner);

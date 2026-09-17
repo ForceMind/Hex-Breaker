@@ -2155,7 +2155,7 @@ export class GameScene extends BaseScene {
       if (i < stars) this.time.delayedCall(250 + i * 260, () => this.svc.audio.pickup());
     }
 
-    modal.panel.add(this.text(0, -48, `用时 ${formatTimeMs(timeMs)} · 消灭 ${this.score}`, { size: 17, bold: true }));
+    modal.panel.add(this.text(0, -48, `用时 ${formatTimeMs(timeMs)} · 消灭 ${this.score}`, { size: 17, bold: true, color: this.COLORS.panelText }));
     modal.panel.add(
       this.text(0, -16, stars === 3 ? '完美通关，一命未失！' : stars === 2 ? '仅失一命，表现出色！' : '通关成功，试试无伤挑战！', {
         size: 13,
@@ -2223,7 +2223,7 @@ export class GameScene extends BaseScene {
     this.tweens.add({ targets: icon, scaleX: 1, scaleY: 1, duration: 260, ease: 'Back.easeOut' });
     modal.panel.add(icon);
 
-    modal.panel.add(this.text(0, -42, `进度 ${this.score} / ${this.levelDef?.targetKills ?? 0}`, { size: 22, bold: true }));
+    modal.panel.add(this.text(0, -42, `进度 ${this.score} / ${this.levelDef?.targetKills ?? 0}`, { size: 22, bold: true, color: this.COLORS.panelText }));
     modal.panel.add(this.text(0, -10, '再接再厉，目标就在前方！', { size: 13, color: this.COLORS.textSecondary }));
     modal.panel.add([
       new Button(this, 0, 72, { label: '重试', width: 280, height: 58, onClick: () => this.refresh(this.runData) }),
@@ -2271,7 +2271,7 @@ export class GameScene extends BaseScene {
       this.confettiFx.start();
       this.time.delayedCall(1200, () => this.confettiFx.stop());
     }
-    modal.panel.add(this.text(0, -62, String(this.score), { size: 44, bold: true }));
+    modal.panel.add(this.text(0, -62, String(this.score), { size: 44, bold: true, color: this.COLORS.panelText }));
     modal.panel.add(this.text(0, -20, '最终得分', { size: 14, color: this.COLORS.textSecondary }));
     modal.panel.add(this.text(0, 24, `等级 Lv${this.level} · 消灭瓦片 ${this.score}`, { size: 15, color: this.COLORS.textSecondary }));
     modal.panel.add(this.text(0, 52, `历史最高 ${this.svc.save.get().highScore}`, { size: 13, color: this.COLORS.textSecondary }));

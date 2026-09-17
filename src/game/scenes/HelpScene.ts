@@ -78,7 +78,7 @@ export class HelpScene extends BaseScene {
 
     let y = top;
     for (const s of buildSections()) {
-      const title = this.text(cardX + pad, y, s.title, { size: 21, bold: true, align: 'left' });
+      const title = this.text(cardX + pad, y, s.title, { size: 21, bold: true, align: 'left', color: COLORS.panelText });
       content.add(title);
       y += 34;
       const body = this.text(cardX + pad, y, s.body, { size: 16, color: COLORS.textSecondary, align: 'left', wrap: cardW - pad * 2, lineSpacing: 8 });

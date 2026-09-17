@@ -38,9 +38,9 @@ export class DailyScene extends BaseScene {
     card.fillRoundedRect(40, cardY, cardW, cardH, 24);
 
     let y = cardY + 52;
-    this.text(cx, y, `📅 ${dateKey}`, { size: 20, bold: true });
+    this.text(cx, y, `📅 ${dateKey}`, { size: 20, bold: true, color: COLORS.panelText });
     y += 46;
-    this.text(cx, y, `目标：消灭 ${level.targetKills} 块瓦片`, { size: 24, bold: true });
+    this.text(cx, y, `目标：消灭 ${level.targetKills} 块瓦片`, { size: 24, bold: true, color: COLORS.panelText });
     y += 34;
     this.text(cx, y, `难度 Lv${level.virtualLevel} · 道具池 Lv${level.itemTierCap}`, { size: 15, color: COLORS.textSecondary });
     y += 52;
@@ -56,7 +56,7 @@ export class DailyScene extends BaseScene {
         else star.setTint(0x17364f).setAlpha(0.15);
         row.add(star);
       }
-      row.add(this.text(74, 0, formatTimeMs(daily.bestTimeMs), { size: 15, bold: true, align: 'left' }));
+      row.add(this.text(74, 0, formatTimeMs(daily.bestTimeMs), { size: 15, bold: true, align: 'left', color: COLORS.panelText }));
     } else {
       this.text(cx, y, '今天还没有成绩，来打第一局！', { size: 15, color: COLORS.textSecondary });
     }

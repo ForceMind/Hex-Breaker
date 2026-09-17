@@ -41,7 +41,7 @@ export class SettingsScene extends BaseScene {
 
     rows.forEach((row, i) => {
       const y = cardY + 12 + 42 + i * 84;
-      this.text(cardX + 28, y, row.label, { size: 20, align: 'left', bold: true });
+      this.text(cardX + 28, y, row.label, { size: 20, align: 'left', bold: true, color: COLORS.panelText });
       if (i > 0) {
         const divider = this.add.graphics();
         divider.fillStyle(COLORS.textPrimary, 0.06);

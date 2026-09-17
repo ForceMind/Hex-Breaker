@@ -47,7 +47,7 @@ export class ThemeScene extends BaseScene {
     cg.fillCircle(cx - 40, 101, 10);
     cg.fillStyle(0xcc8800, 1);
     cg.fillCircle(cx - 40, 101, 5);
-    this.text(cx + 14, 101, String(save.economy.coins), { size: 17, bold: true });
+    this.text(cx + 14, 101, String(save.economy.coins), { size: 17, bold: true, color: COLORS.panelText });
 
     const top = 134; // top edge of the grid
     THEME_IDS.forEach((id, i) => {
@@ -166,7 +166,7 @@ export class ThemeScene extends BaseScene {
     // purchase confirm
     const coins = this.svc.save.get().economy.coins;
     const modal = new Modal(this, this.W, this.H, { width: 400, height: 330, title: `解锁「${theme.name}」` });
-    modal.panel.add(this.text(0, -60, `需要 ${theme.price} 金币（当前 ${coins}）`, { size: 18, bold: true }));
+    modal.panel.add(this.text(0, -60, `需要 ${theme.price} 金币（当前 ${coins}）`, { size: 18, bold: true, color: themeColors().panelText }));
     modal.panel.add(this.text(0, -26, coins >= theme.price ? '解锁后立即应用该皮肤主题。' : '金币不足，去闯关或每日挑战赚取吧！', { size: 14, color: themeColors().textSecondary }));
     const buy = new Button(this, 0, 44, {
       label: `支付 ${theme.price} 金币`,

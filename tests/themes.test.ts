@@ -85,6 +85,29 @@ describe('themes', () => {
     setActiveTheme('sky');
   });
 
+  it('provides enough ink contrast for text on every themed tile', () => {
+    const luminance = (hex: number) => {
+      const r = (hex >> 16) & 0xff;
+      const g = (hex >> 8) & 0xff;
+      const b = hex & 0xff;
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    };
+    for (const id of THEME_IDS) {
+      const c = THEMES[id].colors;
+      const tileBase = luminance(c.tile);
+      const strokeBase = luminance(c.tileStroke);
+      const ink = tileBase > 0.58 ? c.panelText : c.textPrimary;
+      expect(Math.abs(luminance(ink) - tileBase), `${id}.tile`).toBeGreaterThan(0.25);
+      expect(Math.abs(luminance(ink) - strokeBase), `${id}.tileStroke`).toBeGreaterThan(0.18);
+      // Warning numbers keep their orange/red semantics, so their themed
+      // outline must contrast with both candidate tile backdrops.
+      expect(Math.abs(luminance(c.overlay) - tileBase), `${id}.outline`).toBeGreaterThan(0.18);
+      expect(Math.abs(luminance(c.overlay) - strokeBase), `${id}.outlineStroke`).toBeGreaterThan(0.18);
+      // BOSS uses the same contrasting ink + overlay outline over 0x8b4513.
+      expect(Math.abs(luminance(c.overlay) - luminance(0x8b4513)), `${id}.bossOutline`).toBeGreaterThan(0.18);
+    }
+  });
+
   it('playerSpriteKey maps ids to texture keys', () => {
     expect(playerSpriteKey('sky')).toBe('player-sky');
     expect(playerSpriteKey('lava')).toBe('player-lava');

@@ -713,7 +713,9 @@ export class GameScene extends BaseScene {
         fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
         fontSize: '18px',
         fontStyle: 'bold',
-        color: '#17364f',
+        color: css(this.contrastingTextColor(this.tileStackTint())),
+        stroke: css(this.COLORS.overlay),
+        strokeThickness: 4,
         resolution: this.dpr,
       })
       .setOrigin(0.5);
@@ -741,6 +743,15 @@ export class GameScene extends BaseScene {
     return this.tileArtKey ? this.COLORS.tileStroke : this.COLORS.tile;
   }
 
+  /** Legible dark/light ink for text painted directly over a themed colour. */
+  private contrastingTextColor(bg: number): number {
+    const r = (bg >> 16) & 0xff;
+    const g = (bg >> 8) & 0xff;
+    const b = bg & 0xff;
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.58 ? this.COLORS.panelText : this.COLORS.textPrimary;
+  }
+
   private updateTileView(t: TileRec): void {
     const thickness = Math.min(Math.max(t.health, 1), 8);
     t.img.setTexture(tileTexture(thickness));
@@ -750,7 +761,7 @@ export class GameScene extends BaseScene {
     if (t.health <= 0) return;
     t.label.setText(String(t.health));
     const ratio = t.health / t.maxHealth;
-    t.label.setColor(ratio > 0.7 ? '#17364f' : ratio > 0.3 ? '#ff6600' : '#ff0000');
+    t.label.setColor(ratio > 0.7 ? css(this.contrastingTextColor(this.tileStackTint())) : ratio > 0.3 ? '#ff6600' : '#ff0000');
   }
 
   /** Damage a tile; returns true when the tile was destroyed. */
@@ -944,12 +955,12 @@ export class GameScene extends BaseScene {
     const g = this.add.graphics();
     g.fillStyle(0x000000, 0.1);
     g.fillRoundedRect(-w / 2, -h / 2 + 3, w, h, 16);
-    g.fillStyle(0xffffff, 0.92);
+    g.fillStyle(this.COLORS.panel, 0.95);
     g.fillRoundedRect(-w / 2, -h / 2, w, h, 16);
     g.lineStyle(2, this.COLORS.accent, 0.55);
     g.strokeRoundedRect(-w / 2 + 1, -h / 2 + 1, w - 2, h - 2, 15);
     card.add(g);
-    card.add(this.text(-w / 2 + 22, -18, perk.name, { size: 20, bold: true, align: 'left', color: this.COLORS.textPrimary }));
+    card.add(this.text(-w / 2 + 22, -18, perk.name, { size: 20, bold: true, align: 'left', color: this.COLORS.panelText }));
     card.add(this.text(-w / 2 + 22, 14, perk.desc, { size: 14, align: 'left', color: this.COLORS.textSecondary }));
     card.setSize(w, h);
     // Container hit area is top-left-anchored (same convention as Button).
@@ -993,7 +1004,9 @@ export class GameScene extends BaseScene {
         fontFamily: FONT_FAMILY,
         fontSize: '22px',
         fontStyle: 'bold',
-        color: '#ffffff',
+        color: css(this.contrastingTextColor(BOSS_TINT)),
+        stroke: css(this.COLORS.overlay),
+        strokeThickness: 4,
         resolution: this.dpr,
       })
       .setOrigin(0.5);
@@ -1077,9 +1090,9 @@ export class GameScene extends BaseScene {
       fontFamily: FONT_FAMILY,
       fontSize: firstExplain ? '11px' : '13px',
       fontStyle: 'bold',
-      color: '#ffffff',
-      stroke: '#1a2b3c',
-      strokeThickness: 3,
+      color: css(this.COLORS.textPrimary),
+      stroke: css(this.COLORS.bgTop),
+      strokeThickness: 4,
       resolution: this.dpr,
     });
     nameLabel.setOrigin(0.5);

@@ -715,7 +715,7 @@ export class GameScene extends BaseScene {
         fontStyle: 'bold',
         color: css(this.contrastingTextColor(this.tileStackTint())),
         stroke: css(this.COLORS.overlay),
-        strokeThickness: 4,
+        strokeThickness: 2,
         resolution: this.dpr,
       })
       .setOrigin(0.5);
@@ -1009,7 +1009,7 @@ export class GameScene extends BaseScene {
         fontStyle: 'bold',
         color: css(this.contrastingTextColor(BOSS_TINT)),
         stroke: css(this.COLORS.overlay),
-        strokeThickness: 4,
+        strokeThickness: 2,
         resolution: this.dpr,
       })
       .setOrigin(0.5);

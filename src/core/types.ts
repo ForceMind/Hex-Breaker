@@ -58,7 +58,7 @@ export interface PowerInput {
   doubleBullets: boolean;
   rapidFire: boolean;
   piercingBullets: boolean;
-  bulletSizeBoost: number;
+  bulletColumns: number;
   speedBoost: number;
 }
 

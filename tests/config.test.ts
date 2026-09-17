@@ -3,7 +3,7 @@ import {
   BOMB_PARAMS,
   ITEM_META,
   ITEM_UNLOCK_TIERS,
-  MAX_BULLET_SIZE_BOOST,
+  PERK_MAX_BULLET_COLUMNS,
 } from '../src/core/config';
 import { availableItems, dropChance, weaponBaseCooldown, weaponCooldown, weaponDuration } from '../src/core/config';
 import type { BombType } from '../src/core/types';
@@ -18,41 +18,41 @@ describe('item unlock table', () => {
   });
 
   it('the pool grows monotonically with level', () => {
-    let previous = availableItems(1, 0);
+    let previous = availableItems(1);
     for (let level = 2; level <= 25; level++) {
-      const current = availableItems(level, 0);
+      const current = availableItems(level);
       for (const item of previous) expect(current).toContain(item);
       previous = current;
     }
   });
 
   it('level 1 pool is exactly uzi/bomb/shield', () => {
-    expect(availableItems(1, 0).sort()).toEqual(['bomb', 'shield', 'uzi']);
-    expect(availableItems(2, 0)).toHaveLength(3);
+    expect(availableItems(1).sort()).toEqual(['bomb', 'shield', 'uzi']);
+    expect(availableItems(2)).toHaveLength(3);
   });
 
   it('higher tiers unlock at the documented levels', () => {
-    expect(availableItems(3, 0)).toContain('shotgun');
-    expect(availableItems(3, 0)).toContain('boomerang');
-    expect(availableItems(5, 0)).toContain('laser');
-    expect(availableItems(5, 0)).toContain('bigbomb');
-    expect(availableItems(7, 0)).toContain('spread');
-    expect(availableItems(7, 0)).toContain('diagonalbomb');
-    expect(availableItems(9, 0)).toContain('linebomb');
-    expect(availableItems(9, 0)).toContain('speedboost');
-    expect(availableItems(11, 0)).toContain('doublebullets');
-    expect(availableItems(11, 0)).toContain('rapidfire');
-    expect(availableItems(13, 0)).toContain('piercing');
-    expect(availableItems(13, 0)).toContain('magnet');
-    expect(availableItems(15, 0)).toContain('shieldbooster');
-    expect(availableItems(15, 0)).toContain('weaponduration');
-    expect(availableItems(15, 0)).toContain('extralife');
-    expect(availableItems(14, 0)).not.toContain('extralife');
+    expect(availableItems(3)).toContain('shotgun');
+    expect(availableItems(3)).toContain('boomerang');
+    expect(availableItems(5)).toContain('laser');
+    expect(availableItems(5)).toContain('bigbomb');
+    expect(availableItems(7)).toContain('spread');
+    expect(availableItems(7)).toContain('diagonalbomb');
+    expect(availableItems(9)).toContain('linebomb');
+    expect(availableItems(9)).toContain('speedboost');
+    expect(availableItems(11)).toContain('doublebullets');
+    expect(availableItems(11)).toContain('rapidfire');
+    expect(availableItems(13)).toContain('piercing');
+    expect(availableItems(13)).toContain('magnet');
+    expect(availableItems(15)).toContain('shieldbooster');
+    expect(availableItems(15)).toContain('weaponduration');
+    expect(availableItems(15)).toContain('extralife');
+    expect(availableItems(14)).not.toContain('extralife');
   });
 
-  it('bigbullets drops out once the bullet-size cap is hit', () => {
-    expect(availableItems(13, 0)).toContain('bigbullets');
-    expect(availableItems(13, MAX_BULLET_SIZE_BOOST)).not.toContain('bigbullets');
+  it('bigbullets drops out once bullet columns are maxed', () => {
+    expect(availableItems(13, 1)).toContain('bigbullets');
+    expect(availableItems(13, PERK_MAX_BULLET_COLUMNS)).not.toContain('bigbullets');
   });
 
   it('every item has display metadata', () => {

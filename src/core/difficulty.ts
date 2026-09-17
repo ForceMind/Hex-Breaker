@@ -18,7 +18,7 @@ export function calculatePlayerPower(input: PowerInput): number {
   if (input.doubleBullets) power += 2;
   if (input.rapidFire) power += 1.5;
   if (input.piercingBullets) power += 1.3;
-  if (input.bulletSizeBoost > 0) power += input.bulletSizeBoost * 0.3;
+  if (input.bulletColumns > 1) power += (input.bulletColumns - 1) * 1.5;
   if (input.speedBoost > 0) power += input.speedBoost * 0.2;
 
   const activeWeapons = Object.entries(input.weapons).filter(([t, w]) => w.active && t !== 'default').length;

@@ -19,7 +19,7 @@ function powerInput(overrides: Partial<Record<WeaponType, WeaponState>> = {}, ex
     doubleBullets: false,
     rapidFire: false,
     piercingBullets: false,
-    bulletSizeBoost: 0,
+    bulletColumns: 1,
     speedBoost: 0,
     ...extra,
   };
@@ -45,7 +45,7 @@ describe('calculatePlayerPower', () => {
     expect(calculatePlayerPower(powerInput({}, { doubleBullets: true }))).toBeCloseTo(3);
     expect(calculatePlayerPower(powerInput({}, { rapidFire: true }))).toBeCloseTo(2.5);
     expect(calculatePlayerPower(powerInput({}, { piercingBullets: true }))).toBeCloseTo(2.3);
-    expect(calculatePlayerPower(powerInput({}, { bulletSizeBoost: 4 }))).toBeCloseTo(1 + 1.2);
+    expect(calculatePlayerPower(powerInput({}, { bulletColumns: 2 }))).toBeCloseTo(1 + 1.5);
     expect(calculatePlayerPower(powerInput({}, { speedBoost: 6 }))).toBeCloseTo(1 + 1.2);
   });
 

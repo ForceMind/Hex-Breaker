@@ -19,7 +19,6 @@ import {
   LASER_SPEED,
   LINE_BOMB_HALF_WIDTH,
   MAGNET_FORCE,
-  MAX_BULLET_SIZE_BOOST,
   MAX_LIVES,
   PATTERN_NAMES,
   PIERCING_MAX_HITS,
@@ -53,6 +52,7 @@ import { getCampaignLevel, levelActIndexAt, levelPatternAt } from '../../core/le
 import { itemName } from '../../core/itemNames';
 import {
   applyPerk,
+  PERK_MAX_BULLET_COLUMNS,
   PERK_PICK_FRAMES,
   PERKS,
   rollPerkChoices,
@@ -232,7 +232,7 @@ export class GameScene extends BaseScene {
   private fireRateBoost = 1;
   private shieldBooster = false;
   private magneticRange = 0;
-  private bulletSizeBoost = 0;
+  private bulletColumns = 1;
   private weaponDurationBoost = 1;
 
   // --- entities --------------------------------------------------------------
@@ -352,7 +352,7 @@ export class GameScene extends BaseScene {
     this.fireRateBoost = 1;
     this.shieldBooster = false;
     this.magneticRange = 0;
-    this.bulletSizeBoost = 0;
+    this.bulletColumns = 1;
     this.weaponDurationBoost = 1;
 
     this.tiles = [];
@@ -710,7 +710,7 @@ export class GameScene extends BaseScene {
     t.img.setTexture(tileTexture(thickness));
     const layerDepth = (thickness - 1) * 3;
     // The number sits on the top layer, which steps up-left.
-    t.label.setPosition(-layerDepth * 0.3, -layerDepth * 0.3);
+    t.label.setPosition(-layerDepth, -layerDepth);
     if (t.health <= 0) return;
     t.label.setText(String(t.health));
     const ratio = t.health / t.maxHealth;
@@ -774,7 +774,7 @@ export class GameScene extends BaseScene {
 
     if (this.rng() < dropChance(this.difficultyLevel())) {
       const tier = this.levelDef ? this.levelDef.itemTierCap : this.level;
-      const pool = availableItems(tier, this.bulletSizeBoost);
+      const pool = availableItems(tier, this.bulletColumns);
       const pick = pool[Math.floor(this.rng() * pool.length)];
       if (pick) this.spawnItem(t.cx, t.cy, pick);
     }
@@ -793,7 +793,7 @@ export class GameScene extends BaseScene {
   private perkState(): PerkState {
     return {
       fireRateBoost: this.fireRateBoost,
-      bulletSizeBoost: this.bulletSizeBoost,
+      bulletColumns: this.bulletColumns,
       pierceBoost: this.pierceBoost,
       speedBoost: this.speedBoost,
       weaponDurationBoost: this.weaponDurationBoost,
@@ -804,7 +804,7 @@ export class GameScene extends BaseScene {
 
   private syncPerkState(s: PerkState): void {
     this.fireRateBoost = s.fireRateBoost;
-    this.bulletSizeBoost = s.bulletSizeBoost;
+    this.bulletColumns = s.bulletColumns;
     this.pierceBoost = s.pierceBoost;
     this.speedBoost = s.speedBoost;
     this.weaponDurationBoost = s.weaponDurationBoost;
@@ -1091,11 +1091,11 @@ export class GameScene extends BaseScene {
         showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'magnet')}：拾取范围增加！`);
         break;
       case 'bigbullets':
-        if (this.bulletSizeBoost < MAX_BULLET_SIZE_BOOST) {
-          this.bulletSizeBoost += 2;
-          showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'bigbullets')}：子弹尺寸增加！`);
+        if (this.bulletColumns < PERK_MAX_BULLET_COLUMNS) {
+          this.bulletColumns += 1;
+          showToast(this, this.W / 2, this.H * 0.45, `${itemName(this.themeId, 'bigbullets')}：子弹 +1 列！`);
         } else {
-          showToast(this, this.W / 2, this.H * 0.45, '子弹尺寸已达上限！');
+          showToast(this, this.W / 2, this.H * 0.45, '子弹列数已达上限！');
         }
         break;
       case 'weaponduration':
@@ -1316,14 +1316,28 @@ export class GameScene extends BaseScene {
   // ============================================================================
 
   private spawnBullet(x: number, y: number, kind: BulletKind, angleOffset: number, baseDamage: number): void {
-    const radius = BULLET_RADIUS[kind] + this.bulletSizeBoost;
+    // The 双排弹头 perk replicates every shot into parallel columns. Columns
+    // are offset perpendicular to the bullet's travel direction so spread /
+    // uzi shots fan out without collapsing onto one line.
+    const cols = Math.max(1, this.bulletColumns);
+    const gap = 12;
+    for (let c = 0; c < cols; c++) {
+      const off = (c - (cols - 1) / 2) * gap;
+      // perpendicular of travel dir (sin(angleOffset), -1) is (1, sin(angleOffset))
+      const bx = x + off;
+      const by = y + off * angleOffset;
+      this.spawnOneBullet(bx, by, kind, angleOffset, baseDamage);
+    }
+  }
+
+  private spawnOneBullet(x: number, y: number, kind: BulletKind, angleOffset: number, baseDamage: number): void {
+    const radius = BULLET_RADIUS[kind];
     const speed = kind === 'laser' ? LASER_SPEED : BULLET_SPEED;
     const view = kind === 'laser'
       ? this.add.image(x, y, TEX.laserBolt).setTint(BULLET_COLORS[kind]).setScale(0.35, 0.4)
       : this.add.image(x, y, TEX.bullet).setTint(BULLET_COLORS[kind]).setScale((radius * 2) / 30);
     view.setDepth(DEPTH.projectiles);
-    let damage = baseDamage;
-    if (radius > 6) damage += Math.floor((radius - 6) / 2);
+    const damage = baseDamage;
     this.bullets.push({
       x,
       y,
@@ -1360,13 +1374,14 @@ export class GameScene extends BaseScene {
           break;
         case 'uzi': {
           const count = w.level >= 3 ? 2 : 1;
+          const spread = 0.6;
           for (let b = 0; b < count; b++) {
-            this.spawnBullet(centerX + (b - 0.5) * 8, centerY - b * 5, 'normal', 0, 1);
+            this.spawnBullet(centerX + (b - 0.5) * 8, centerY - b * 5, 'normal', (b - (count - 1) / 2) * spread, 1);
           }
           if (this.doubleBullets) {
             for (let b = 0; b < count; b++) {
-              this.spawnBullet(centerX - 6 + (b - 0.5) * 8, centerY - b * 5, 'normal', 0, 1);
-              this.spawnBullet(centerX + 6 + (b - 0.5) * 8, centerY - b * 5, 'normal', 0, 1);
+              this.spawnBullet(centerX - 6 + (b - 0.5) * 8, centerY - b * 5, 'normal', (b - (count - 1) / 2) * spread, 1);
+              this.spawnBullet(centerX + 6 + (b - 0.5) * 8, centerY - b * 5, 'normal', (b - (count - 1) / 2) * spread, 1);
             }
           }
           break;
@@ -1447,8 +1462,10 @@ export class GameScene extends BaseScene {
       this.spawnEscortWave();
     }
 
-    this.handleInput();
-    this.updatePlayerState();
+    if (!this.victoryStarted) {
+      this.handleInput();
+      this.updatePlayerState();
+    }
     this.updateBullets();
     this.updateTiles();
     this.updateItems();
@@ -1724,7 +1741,7 @@ export class GameScene extends BaseScene {
       doubleBullets: this.doubleBullets,
       rapidFire: this.rapidFire,
       piercingBullets: this.piercingBullets,
-      bulletSizeBoost: this.bulletSizeBoost,
+      bulletColumns: this.bulletColumns,
       speedBoost: this.speedBoost,
     });
   }

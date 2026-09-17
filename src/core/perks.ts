@@ -1,4 +1,4 @@
-import { MAX_BULLET_SIZE_BOOST, SHIELD_FRAMES } from './config';
+import { PERK_MAX_BULLET_COLUMNS, SHIELD_FRAMES } from './config';
 
 /**
  * Level-up perks: instead of a flat coin grant, levelling pauses the run and
@@ -15,7 +15,7 @@ export interface PerkDef {
 
 export const PERKS: readonly PerkDef[] = [
   { id: 'firerate', name: '火力全开', desc: '全部武器射速提升 15%' },
-  { id: 'bigshot', name: '重弹头', desc: '子弹尺寸 +2' },
+  { id: 'bigshot', name: '双排弹头', desc: '所有武器额外 +1 列子弹' },
   { id: 'pierce', name: '幽灵弹', desc: '子弹额外穿透 1 个目标' },
   { id: 'speed', name: '疾风靴', desc: '移动速度 +1' },
   { id: 'duration', name: '持久武器', desc: '特殊武器时长 +50%' },
@@ -26,17 +26,17 @@ export const PERKS: readonly PerkDef[] = [
 export const PERK_FIRE_RATE_STEP = 0.85;
 /** Hard floor so stacked picks can never make cooldowns degenerate. */
 export const PERK_FIRE_RATE_MIN = 0.55;
-export const PERK_BULLET_SIZE_STEP = 2;
 export const PERK_SPEED_STEP = 1;
 export const PERK_DURATION_STEP = 0.5;
 export const PERK_SHIELD_FRAMES = SHIELD_FRAMES;
+export { PERK_MAX_BULLET_COLUMNS };
 /** Countdown on the pick overlay, in frames (8 s at 60 fps). */
 export const PERK_PICK_FRAMES = 480;
 
 /** Run-state slice the perk pool/apply logic needs. */
 export interface PerkState {
   fireRateBoost: number;
-  bulletSizeBoost: number;
+  bulletColumns: number;
   pierceBoost: number;
   speedBoost: number;
   weaponDurationBoost: number;
@@ -51,7 +51,7 @@ export function availablePerks(s: PerkState): PerkDef[] {
       case 'firerate':
         return s.fireRateBoost > PERK_FIRE_RATE_MIN + 1e-6;
       case 'bigshot':
-        return s.bulletSizeBoost < MAX_BULLET_SIZE_BOOST;
+        return s.bulletColumns < PERK_MAX_BULLET_COLUMNS;
       case 'shield':
         return !s.shield || s.shieldDuration <= 0;
       default:
@@ -79,7 +79,7 @@ export function applyPerk(s: PerkState, id: PerkId): PerkState {
       s.fireRateBoost = Math.max(PERK_FIRE_RATE_MIN, s.fireRateBoost * PERK_FIRE_RATE_STEP);
       break;
     case 'bigshot':
-      s.bulletSizeBoost = Math.min(MAX_BULLET_SIZE_BOOST, s.bulletSizeBoost + PERK_BULLET_SIZE_STEP);
+      s.bulletColumns = Math.min(PERK_MAX_BULLET_COLUMNS, s.bulletColumns + 1);
       break;
     case 'pierce':
       s.pierceBoost += 1;

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_BULLET_SIZE_BOOST, SHIELD_FRAMES } from '../src/core/config';
+import { SHIELD_FRAMES } from '../src/core/config';
 import {
   applyPerk,
   availablePerks,
   PERK_FIRE_RATE_MIN,
   PERK_FIRE_RATE_STEP,
+  PERK_MAX_BULLET_COLUMNS,
   PERKS,
   rollPerkChoices,
   type PerkState,
@@ -12,7 +13,7 @@ import {
 import { mulberry32 } from '../src/core/prng';
 
 function baseState(): PerkState {
-  return { fireRateBoost: 1, bulletSizeBoost: 0, pierceBoost: 0, speedBoost: 0, weaponDurationBoost: 1, shield: false, shieldDuration: 0 };
+  return { fireRateBoost: 1, bulletColumns: 1, pierceBoost: 0, speedBoost: 0, weaponDurationBoost: 1, shield: false, shieldDuration: 0 };
 }
 
 describe('perks', () => {
@@ -23,7 +24,7 @@ describe('perks', () => {
   it('excludes maxed-out perks from the pool', () => {
     const s = baseState();
     s.fireRateBoost = PERK_FIRE_RATE_MIN;
-    s.bulletSizeBoost = MAX_BULLET_SIZE_BOOST;
+    s.bulletColumns = PERK_MAX_BULLET_COLUMNS;
     s.shield = true;
     s.shieldDuration = 100;
     const ids = availablePerks(s).map((p) => p.id);
@@ -56,7 +57,7 @@ describe('perks', () => {
     // exhaustively capping is impossible in-run, so assert the bound instead.
     const s = baseState();
     s.fireRateBoost = PERK_FIRE_RATE_MIN;
-    s.bulletSizeBoost = MAX_BULLET_SIZE_BOOST;
+    s.bulletColumns = PERK_MAX_BULLET_COLUMNS;
     s.shield = true;
     s.shieldDuration = 100;
     const pool = availablePerks(s);
@@ -73,11 +74,14 @@ describe('perks', () => {
     expect(s.fireRateBoost).toBe(PERK_FIRE_RATE_MIN);
   });
 
-  it('bigshot respects the global bullet-size cap', () => {
+  it('bigshot adds a bullet column up to the cap', () => {
     const s = baseState();
-    s.bulletSizeBoost = MAX_BULLET_SIZE_BOOST - 1;
     applyPerk(s, 'bigshot');
-    expect(s.bulletSizeBoost).toBe(MAX_BULLET_SIZE_BOOST);
+    expect(s.bulletColumns).toBe(2);
+    applyPerk(s, 'bigshot');
+    expect(s.bulletColumns).toBe(PERK_MAX_BULLET_COLUMNS);
+    applyPerk(s, 'bigshot');
+    expect(s.bulletColumns).toBe(PERK_MAX_BULLET_COLUMNS);
   });
 
   it('pierce / speed / duration stack without a cap', () => {

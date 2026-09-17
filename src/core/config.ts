@@ -27,7 +27,6 @@ export const PLAYER_WIDTH = 40;
 export const PLAYER_HEIGHT = 40;
 export const PLAYER_SPEED = 5;
 export const PLAYER_BOTTOM_MARGIN = 60;
-export const MAX_BULLET_SIZE_BOOST = 8;
 export const MAGNET_STEP = 50;
 export const MAGNET_FORCE = 0.3;
 export const SPEED_BOOST_STEP = 2;
@@ -133,6 +132,8 @@ export const BOOMERANG = {
 } as const;
 
 // --- shields -----------------------------------------------------------------
+/** Max bullet columns from the 双排弹头 perk / bigbullets item (base 1 + 2 picks). */
+export const PERK_MAX_BULLET_COLUMNS = 3;
 export const SHIELD_FRAMES = 300;
 export const STRONG_SHIELD_FRAMES = 600;
 
@@ -157,12 +158,12 @@ export const ITEM_UNLOCK_TIERS: readonly { level: number; items: readonly ItemTy
   { level: 15, items: ['shieldbooster', 'weaponduration', 'extralife'] },
 ];
 
-export function availableItems(level: number, bulletSizeBoost: number): ItemType[] {
+export function availableItems(level: number, bulletColumns = 1): ItemType[] {
   const out: ItemType[] = [];
   for (const tier of ITEM_UNLOCK_TIERS) {
     if (level < tier.level) continue;
     for (const item of tier.items) {
-      if (item === 'bigbullets' && bulletSizeBoost >= MAX_BULLET_SIZE_BOOST) continue;
+      if (item === 'bigbullets' && bulletColumns >= PERK_MAX_BULLET_COLUMNS) continue;
       out.push(item);
     }
   }

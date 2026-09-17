@@ -814,7 +814,7 @@ export class GameScene extends BaseScene {
     }
 
     this.killsSinceLevelup += 1;
-    if (this.killsSinceLevelup >= levelUpKillsNeeded(this.level)) {
+    if (this.killsSinceLevelup >= levelUpKillsNeeded(this.level) && !this.victoryStarted) {
       this.killsSinceLevelup = 0;
       this.level += 1;
       this.gameSpeed += SPEED_PER_LEVEL;
